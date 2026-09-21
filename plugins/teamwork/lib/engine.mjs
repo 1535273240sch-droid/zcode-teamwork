@@ -44,7 +44,9 @@ import {schedule, DEFAULT_SPAWN_BUDGET} from './scheduler.mjs';
 import {decideVerifiers, scopedPrompts, judgeGate, createRepairWorkstream} from './verification.mjs';
 import {claim, release, checkWrite, findCollisions, expiredEntries} from './ownership.mjs';
 import {createEvent, appendEvent, summarize} from './journal.mjs';
-import {assessFromPaths, buildHandoff, renderHandoff} from './handoff.mjs';
+import {assessFromPaths, buildHandoff, renderHandoff, renderBriefing, shouldPrepareSuccession} from './handoff.mjs';
+import {loadPattern, listPatterns, suggestPattern, checkPlanAgainstPattern, describePattern} from './patterns.mjs';
+import {createIsolation, describeIsolation, checkRoleWrite, chooseMode} from './isolation.mjs';
 
 /**
  * A campaign's control surface.
@@ -102,8 +104,14 @@ export class TeamworkEngine {
 		}
 		const state = createCampaign({...input, cwd: this.cwd});
 		state.metadata.stateDir = input?.stateDir ?? '.teamwork';
+		// An unknown pattern is refused before anything is written, so a campaign
+		// cannot start in a shape nothing can validate.
+		if (typeof input?.pattern === 'string' && input.pattern.length > 0) {
+			const loaded = loadPattern(input.pattern);
+			if (!loaded.ok) return loaded;
+		}
 		const saved = this.save(state);
-		this.log('campaign-created', {objective: saved.objective, mode: saved.mode, replaced: existing !== null});
+		this.log('campaign-created', {objective: saved.objective, mode: saved.mode, pattern: saved.pattern, replaced: existing !== null});
 		return {ok: true, state: saved};
 	}
 
@@ -205,6 +213,17 @@ export class TeamworkEngine {
 					fileCollisions.map((c) => `${c.file} (${c.milestones.join(', ')})`).join('; '),
 				collisions: fileCollisions,
 			};
+		}
+
+		// The pattern decides what a plan has to satisfy. Checking before committing
+		// means a plan that violates its own pattern fails here rather than at a gate
+		// after the work is done.
+		const loaded = loadPattern(state.pattern);
+		if (loaded.ok) {
+			const check = checkPlanAgainstPattern(loaded.pattern, milestones);
+			if (!check.ok) {
+				return {ok: false, reason: `the plan does not satisfy pattern "${state.pattern}": ${check.problems.join('; ')}`, problems: check.problems};
+			}
 		}
 
 		// Rebuild from scratch so a re-plan does not inherit stale ownership.
@@ -365,7 +384,116 @@ export class TeamworkEngine {
 		return {ok: true, state: saved};
 	}
 
+	// -- patterns ----------------------------------------------------------
+
+	/** Patterns available to a campaign, for the interview to choose from. */
+	listPatterns() {
+		return {ok: true, patterns: listPatterns()};
+	}
+
+	/** A hint at which pattern fits, so the interview starts from a proposal. */
+	suggestPattern(objective) {
+		const state = this.load();
+		const text = objective ?? state?.objective;
+		if (typeof text !== 'string' || text.length === 0) {
+			return {ok: false, reason: 'suggestPattern needs an objective'};
+		}
+		const id = suggestPattern(text);
+		return {ok: true, pattern: id, description: describePattern(id)};
+	}
+
+	/** Set the campaign's pattern. Refused once milestones exist, since they were shaped for the old one. */
+	setPattern(id) {
+		const loaded = loadPattern(id);
+		if (!loaded.ok) return loaded;
+		const state = this.load();
+		if (!state) return {ok: false, reason: 'no campaign'};
+		if (state.milestones.length > 0 && state.approved === true) {
+			return {
+				ok: false,
+				reason:
+					'the campaign is already approved, and its milestones were shaped for the current pattern. ' +
+					'Re-plan before changing the pattern.',
+			};
+		}
+		const saved = this.save({...state, pattern: id});
+		this.log('note', {note: 'pattern set', pattern: id});
+		return {ok: true, state: saved, description: describePattern(id)};
+	}
+
+	/** What the campaign's pattern is, and what it demands. */
+	pattern() {
+		const state = this.load();
+		if (!state) return {ok: false, reason: 'no campaign'};
+		const loaded = loadPattern(state.pattern);
+		if (!loaded.ok) return loaded;
+		return {ok: true, pattern: loaded.pattern, description: describePattern(state.pattern)};
+	}
+
+	// -- isolation ---------------------------------------------------------
+
+	/** Where a workstream would work. Chooses a tier without creating anything. */
+	isolationPlan(workstreamId) {
+		const mode = chooseMode('auto', this.cwd);
+		return {ok: true, mode, workstreamId, reason: mode === 'worktree' ? 'git worktrees are available' : 'no usable git worktree; falling back to a private directory'};
+	}
+
+	/** Create isolation for a workstream. Falls back rather than failing. */
+	prepareIsolation(workstreamId, options = {}) {
+		const result = createIsolation({
+			stateDir: this.stateDir,
+			workstreamId,
+			cwd: this.cwd,
+			mode: options.mode ?? 'auto',
+		});
+		if (result.ok) this.log('note', {note: 'isolation created', workstream: workstreamId, mode: result.mode});
+		return result;
+	}
+
+	/** Whether a role may write, given its job. */
+	canRoleWrite(role, isolation) {
+		return checkRoleWrite(role, isolation);
+	}
+
 	// -- continuity --------------------------------------------------------
+
+	/**
+	 * Whether this campaign is near its dispatch ceiling and should write a briefing.
+	 *
+	 * The check is offered rather than acted on: writing a briefing is a side effect
+	 * on the workspace, and an engine method that silently writes files would be a
+	 * surprise to whoever called it.
+	 */
+	successionCheck() {
+		const state = this.load();
+		if (!state) return {ok: false, reason: 'no campaign'};
+		const journal = summarize(this.paths.journal);
+		const used = journal.dispatches;
+		const needed = shouldPrepareSuccession(used, this.budget);
+		return {
+			ok: true,
+			shouldPrepare: needed,
+			used,
+			budget: this.budget,
+			reason: needed ? `dispatches used (${used}) have reached the succession threshold of ${this.budget}` : undefined,
+		};
+	}
+
+	/** Render the briefing a successor session reads first. */
+	briefing(reason) {
+		const state = this.load();
+		if (!state) return {ok: false, reason: 'no campaign'};
+		const journal = summarize(this.paths.journal);
+		const text = renderBriefing({
+			state,
+			journal,
+			reason: reason ?? 'succession',
+			used: journal.dispatches,
+			budget: this.budget,
+			stateDir: this.stateDir,
+		});
+		return {ok: true, briefing: text};
+	}
 
 	/** Whether the campaign looks stalled, and why. */
 	staleness(options = {}) {

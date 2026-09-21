@@ -57,21 +57,29 @@ Teamwork 强制把「做」和「验」分开：
 | `ownership.mjs` | 文件独占：声明式归属 + 可续租租约，`expired` 与 `held` 分开报告 |
 | `verification.mjs` | 按**影响面**决定验证人数；判定裁决（一票否决，自审不算） |
 | `journal.mjs` | 追加式日志，撕裂行跳过，可折叠出摘要 |
-| `handoff.mjs` | 停滞检测 + 会话交接（跨会话续跑） |
+| `handoff.mjs` | 停滞检测 + 会话交接 + **继任简报**（预算将尽时写给下一个会话） |
+| `isolation.mjs` | 工作区隔离三层（worktree / 独立目录 / 共享）+ **按角色限制写权限** |
+| `patterns.mjs` | 6 条执行路径（分布式编码 / 迭代编码 / 文档审阅 / 数学证明 / 自验证 / 研究）+ 计划合规校验 |
 | `decompose.mjs` / `scheduler.mjs` | 目标→草稿；依赖分批 + 冲突检测 |
 | `teamwork-cli.mjs` | 全部动词的命令行入口，`--json` 输出，拒绝时非零退出 |
 
 ```bash
 CLI=plugins/teamwork/lib/teamwork-cli.mjs
 
-node $CLI init --objective "..." [--force]
+node $CLI init --objective "..." [--force] [--pattern <id>]
+node $CLI patterns                    # 列出 6 条执行路径
+node $CLI pattern --suggest "..."      # 按目标推荐一条
+node $CLI pattern --set <id>           # 在审批前切换
 node $CLI decompose && node $CLI plan --milestones m.json
 node $CLI approve
 node $CLI schedule
+node $CLI isolation --prepare ws1      # 为工作流建立隔离
 node $CLI can-write --file src/a.ts --milestone m1
 node $CLI verify --milestone m1 --verdicts v.json
 node $CLI status
 node $CLI stale
+node $CLI succession                   # 预算将尽时是否该写简报
+node $CLI briefing
 node $CLI handoff
 ```
 

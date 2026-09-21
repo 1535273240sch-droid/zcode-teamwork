@@ -34,6 +34,7 @@ import {resolve} from 'node:path';
 
 import {TeamworkEngine} from './engine.mjs';
 import {renderHandoff} from './handoff.mjs';
+import {describeIsolation} from './isolation.mjs';
 
 function out(text) {
 	process.stdout.write(`${text}\n`);
@@ -92,6 +93,7 @@ switch (command) {
 				mode: args.mode,
 				integrityMode: args.integrity,
 				executionPath: args.path,
+				pattern: args.pattern,
 				force: args.force === true,
 			}),
 			args,
@@ -249,6 +251,62 @@ switch (command) {
 	case 'handoff': {
 		const result = engine.handoff(args.reason);
 		emit(result, args, (r) => out(r.ok ? renderHandoff(r) : `Refused: ${r.reason}`));
+		break;
+	}
+
+	case 'patterns': {
+		const result = engine.listPatterns();
+		emit(result, args, (r) => {
+			for (const p of r.patterns) {
+				out(`${p.id}`);
+				out(`  ${p.title}: ${p.summary}`);
+				out(`  Use when: ${p.whenToUse}`);
+			}
+		});
+		break;
+	}
+
+	case 'pattern': {
+		if (typeof args.set === 'string') {
+			emit(engine.setPattern(args.set), args, (r) => out(r.ok ? `Pattern set.\n\n${r.description}` : `Refused: ${r.reason}`));
+			break;
+		}
+		if (typeof args.suggest === 'string') {
+			emit(engine.suggestPattern(args.suggest === true ? undefined : args.suggest), args, (r) =>
+				r.ok ? out(`Suggested: ${r.pattern}\n\n${r.description}`) : out(`Refused: ${r.reason}`),
+			);
+			break;
+		}
+		const result = engine.pattern();
+		emit(result, args, (r) => out(r.ok ? r.description : `Refused: ${r.reason}`));
+		break;
+	}
+
+	case 'isolation': {
+		if (typeof args.prepare === 'string') {
+			emit(engine.prepareIsolation(args.prepare, {mode: args.mode}), args, (r) =>
+				r.ok ? out(describeIsolation(r)) : out(`Refused: ${r.reason}`),
+			);
+			break;
+		}
+		const result = engine.isolationPlan(args.workstream ?? 'example');
+		emit(result, args, (r) => out(`Isolation tier for this workspace: ${r.mode}\n${r.reason}`));
+		break;
+	}
+
+	case 'briefing': {
+		const result = engine.briefing(args.reason);
+		emit(result, args, (r) => out(r.ok ? r.briefing : `Refused: ${r.reason}`));
+		break;
+	}
+
+	case 'succession': {
+		const result = engine.successionCheck();
+		emit(result, args, (r) => {
+			if (!r.ok) return out(`Refused: ${r.reason}`);
+			out(`Dispatches used: ${r.used} of ${r.budget}`);
+			out(r.shouldPrepare ? `A briefing should be written: ${r.reason}` : 'No briefing needed yet.');
+		});
 		break;
 	}
 

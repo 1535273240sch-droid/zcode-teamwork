@@ -621,7 +621,7 @@ console.log('\nhandoff.mjs - staleness and continuity');
 
 function activeState(over = {}) {
 	let state = createCampaign({objective: 'x'});
-	state = addMilestone(state, {...createMilestone({id: 'm1', files: ['src/a.ts']}), verified: false});
+	state = addMilestone(state, {...createMilestone({id: 'm1', files: ['src/a.ts'], verified_by: 'critic'}), verified: false});
 	state = setPhase(setPhase(state, 'charter'), 'approved');
 	return {...state, ...over};
 }
@@ -737,7 +737,7 @@ function engineIn(name) {
 	const engine = engineIn('engine-approve');
 	engine.initProject({objective: 'x'});
 	check('engine: approve refuses a campaign with no milestones', engine.approve().ok === false);
-	engine.createPlan([{id: 'm1', files: []}]);
+	engine.createPlan([{id: 'm1', files: [], verified_by: 'critic'}]);
 	check('engine: approve accepts a campaign with milestones', engine.approve().ok === true);
 	check('engine: approve marks the campaign approved', engine.load().approved === true);
 }
@@ -745,14 +745,14 @@ function engineIn(name) {
 {
 	const engine = engineIn('engine-plan');
 	engine.initProject({objective: 'x'});
-	const bad = engine.createPlan([{id: 'm1', files: []}, {id: 'm1', files: []}]);
+	const bad = engine.createPlan([{id: 'm1', files: [], verified_by: 'critic'}, {id: 'm1', files: [], verified_by: 'critic'}]);
 	check('engine: createPlan refuses duplicate ids', bad.ok === false, JSON.stringify(bad).slice(0, 160));
 
 	const missing = engine.createPlan([{id: 'm1', files: [], blocked_by: ['nope']}]);
 	check('engine: createPlan refuses an unknown dependency', missing.ok === false, JSON.stringify(missing).slice(0, 160));
 
 	const clash = engine.createPlan([
-		{id: 'm1', files: ['src/a.ts']},
+		{id: 'm1', files: ['src/a.ts'], verified_by: 'critic'},
 		{id: 'm2', files: ['./SRC/A.TS']},
 	]);
 	check('engine: createPlan refuses two owners for one file', clash.ok === false, JSON.stringify(clash).slice(0, 200));
@@ -765,13 +765,13 @@ function engineIn(name) {
 	const engine = engineIn('engine-plan-ok');
 	engine.initProject({objective: 'x'});
 	const ok = engine.createPlan([
-		{id: 'm1', files: ['src/a.ts']},
-		{id: 'm2', files: ['src/b.ts'], blocked_by: ['m1']},
+		{id: 'm1', files: ['src/a.ts'], verified_by: 'critic'},
+		{id: 'm2', files: ['src/b.ts'], blocked_by: ['m1'], verified_by: 'critic'},
 	]);
 	check('engine: a valid plan is accepted', ok.ok === true, JSON.stringify(ok).slice(0, 160));
 	check('engine: a plan records ownership', engine.load().ownership.length === 2, String(engine.load().ownership.length));
 
-	const replan = engine.createPlan([{id: 'm3', files: ['src/c.ts']}]);
+	const replan = engine.createPlan([{id: 'm3', files: ['src/c.ts'], verified_by: 'critic'}]);
 	check('engine: re-planning replaces the old plan', replan.ok === true && engine.load().milestones.length === 1, String(engine.load().milestones.length));
 	check('engine: re-planning does not keep stale ownership', engine.load().ownership.length === 1, String(engine.load().ownership.length));
 }
@@ -779,7 +779,7 @@ function engineIn(name) {
 {
 	const engine = engineIn('engine-claim');
 	engine.initProject({objective: 'x'});
-	engine.createPlan([{id: 'm1', files: ['src/a.ts']}, {id: 'm2', files: []}]);
+	engine.createPlan([{id: 'm1', files: ['src/a.ts'], verified_by: 'critic'}, {id: 'm2', files: [], verified_by: 'critic'}]);
 
 	const denied = engine.claimFile('src/a.ts', 'm2');
 	check('engine: claiming another milestone file is refused', denied.ok === false, JSON.stringify(denied).slice(0, 160));
@@ -800,9 +800,9 @@ function engineIn(name) {
 	const engine = engineIn('engine-schedule');
 	engine.initProject({objective: 'x'});
 	engine.createPlan([
-		{id: 'm1', files: ['src/a.ts']},
-		{id: 'm2', files: ['src/b.ts']},
-		{id: 'm3', files: ['src/c.ts'], blocked_by: ['m1']},
+		{id: 'm1', files: ['src/a.ts'], verified_by: 'critic'},
+		{id: 'm2', files: ['src/b.ts'], verified_by: 'critic'},
+		{id: 'm3', files: ['src/c.ts'], blocked_by: ['m1'], verified_by: 'critic'},
 	]);
 	const schedule = engine.getSchedule();
 	check('engine: independent milestones share a batch', schedule.batches[0].milestones.length === 2, JSON.stringify(schedule.batches[0]));
@@ -814,7 +814,7 @@ function engineIn(name) {
 {
 	const engine = engineIn('engine-verify');
 	engine.initProject({objective: 'x'});
-	engine.createPlan([{id: 'm1', files: ['src/a.ts']}]);
+	engine.createPlan([{id: 'm1', files: ['src/a.ts'], verified_by: 'critic'}]);
 
 	const sizing = engine.planVerification('m1');
 	check('engine: verification sizing is produced', sizing.ok === true, JSON.stringify(sizing).slice(0, 160));
@@ -829,7 +829,7 @@ function engineIn(name) {
 {
 	const engine = engineIn('engine-repair');
 	engine.initProject({objective: 'x'});
-	engine.createPlan([{id: 'm1', files: ['src/a.ts']}]);
+	engine.createPlan([{id: 'm1', files: ['src/a.ts'], verified_by: 'critic'}]);
 
 	const failed = engine.verifyMilestone('m1', [{role: 'challenger', verdict: 'FALSIFIED', reason: 'retry path uncovered'}]);
 	check('engine: an objection fails the gate', failed.gate.result === 'failed', JSON.stringify(failed.gate));
@@ -842,7 +842,7 @@ function engineIn(name) {
 {
 	const engine = engineIn('engine-final');
 	engine.initProject({objective: 'x'});
-	engine.createPlan([{id: 'm1', files: ['src/a.ts']}]);
+	engine.createPlan([{id: 'm1', files: ['src/a.ts'], verified_by: 'critic'}]);
 	// Completion requires approval, so the campaign has to go through it even when the
 	// test is only interested in the final gate.
 	engine.approve();
@@ -856,7 +856,7 @@ function engineIn(name) {
 {
 	const engine = engineIn('engine-status');
 	engine.initProject({objective: 'port it'});
-	engine.createPlan([{id: 'm1', files: ['src/a.ts']}]);
+	engine.createPlan([{id: 'm1', files: ['src/a.ts'], verified_by: 'critic'}]);
 	const status = engine.status();
 	check('engine: status reports the objective', status.objective === 'port it');
 	check('engine: status reports the milestone', status.milestones.length === 1, JSON.stringify(status.milestones));
@@ -868,7 +868,7 @@ function engineIn(name) {
 {
 	const engine = engineIn('engine-cancel');
 	engine.initProject({objective: 'x'});
-	engine.createPlan([{id: 'm1', files: []}]);
+	engine.createPlan([{id: 'm1', files: [], verified_by: 'critic'}]);
 	engine.approve();
 	const cancelled = engine.cancel('user stopped');
 	check('engine: a campaign can be cancelled', cancelled.ok === true);
@@ -880,7 +880,7 @@ function engineIn(name) {
 	const engine = engineIn('engine-handoff');
 	check('engine: handoff on a missing campaign is refused', engine.handoff().ok === false);
 	engine.initProject({objective: 'x'});
-	engine.createPlan([{id: 'm1', files: ['src/a.ts']}]);
+	engine.createPlan([{id: 'm1', files: ['src/a.ts'], verified_by: 'critic'}]);
 	engine.approve();
 	const handoff = engine.handoff('session ended');
 	check('engine: handoff carries the open milestones', handoff.openMilestones.length === 1, JSON.stringify(handoff.openMilestones));
@@ -890,7 +890,7 @@ function engineIn(name) {
 {
 	const engine = engineIn('engine-stale');
 	engine.initProject({objective: 'x'});
-	engine.createPlan([{id: 'm1', files: []}]);
+	engine.createPlan([{id: 'm1', files: [], verified_by: 'critic'}]);
 	engine.approve();
 	const staleness = engine.staleness();
 	check('engine: staleness is assessable', typeof staleness.stalled === 'boolean', JSON.stringify(staleness));
@@ -925,7 +925,7 @@ console.log('\nteamwork-cli.mjs - the command surface');
 
 {
 	const dir = freshDir('cli-flow');
-	writeFileSync(join(dir, 'm.json'), JSON.stringify([{id: 'm1', files: ['src/a.ts']}, {id: 'm2', files: ['src/b.ts']}]));
+	writeFileSync(join(dir, 'm.json'), JSON.stringify([{id: 'm1', files: ['src/a.ts'], verified_by: 'critic'}, {id: 'm2', files: ['src/b.ts'], verified_by: 'critic'}]));
 
 	runCli(['init', '--objective', 'x'], dir);
 	const plan = runCli(['plan', '--milestones', 'm.json'], dir);

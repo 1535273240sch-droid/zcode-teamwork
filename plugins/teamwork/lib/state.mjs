@@ -94,6 +94,7 @@ export function createCampaign(input) {
 		mode,
 		integrityMode,
 		executionPath,
+		pattern: typeof input?.pattern === 'string' && input.pattern.length > 0 ? input.pattern : 'distributed-coding',
 		phase: 'scoping',
 		approved: false,
 		createdAt: now,

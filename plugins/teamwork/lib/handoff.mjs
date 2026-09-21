@@ -188,6 +188,100 @@ export function renderHandoff(handoff) {
 	return lines.join('\n');
 }
 
+// A campaign that has used this fraction of its dispatch budget is about to run
+// out. Writing the briefing now means the successor starts from a written record
+// rather than from whatever survived in a context window.
+export const SUCCESSION_BUDGET_FRACTION = 0.9;
+
+/** Whether a campaign is close enough to its budget ceiling to warrant a dump. */
+export function shouldPrepareSuccession(used, budget) {
+	if (!Number.isFinite(used) || !Number.isFinite(budget) || budget <= 0) return false;
+	return used >= budget * SUCCESSION_BUDGET_FRACTION;
+}
+
+/**
+ * Render the briefing a successor session reads first.
+ *
+ * Deliberately contains only things a fresh session cannot recover: where the state
+ * lives, what the pattern and integrity mode are, which milestones are open and who
+ * owns them, what the last gate decided, and what the successor must not redo. It
+ * does not summarise the conversation - that summary is the one artifact a successor
+ * cannot check, so it is the one thing that must not be invented for it.
+ */
+export function renderBriefing(input) {
+	const {state, journal, reason, used, budget, stateDir} = input ?? {};
+	const lines = [
+		'# Teamwork briefing',
+		'',
+		`Reason: ${reason ?? 'succession'}`,
+		`At: ${new Date().toISOString()}`,
+		'',
+		'## Where things are',
+		'',
+		`- State directory: ${stateDir ?? '.teamwork'}`,
+		'- Campaign state: campaign.json',
+		'- Plan: plan.json',
+		'- Journal: journal.jsonl',
+		'- Verification records: verifications/',
+		'- Final audit: final-audit.md',
+		'',
+	];
+	if (state) {
+		lines.push('## Campaign', '');
+		lines.push(`- Objective: ${state.objective}`);
+		lines.push(`- Phase: ${state.phase}`);
+		lines.push(`- Mode: ${state.mode}   Integrity: ${state.integrityMode}`);
+		if (state.pattern) lines.push(`- Pattern: ${state.pattern}`);
+		if (Number.isFinite(used) && Number.isFinite(budget)) {
+			lines.push(`- Dispatches used: ${used} of ${budget}`);
+		}
+		lines.push('');
+
+		const open = openMilestones(state);
+		lines.push(`## Open milestones (${open.length})`, '');
+		if (open.length === 0) {
+			lines.push('None. The campaign is ready for final verification.', '');
+		} else {
+			for (const m of open) {
+				lines.push(`### ${m.id}`, '');
+				lines.push(`- Status: ${m.status}`);
+				lines.push(`- Deliverable: ${m.deliverable}`);
+				lines.push(`- Acceptance: ${m.acceptance}`);
+				lines.push(`- Owner: ${m.owner_role}   Verifier: ${m.verified_by}`);
+				if ((m.files ?? []).length > 0) lines.push(`- Files: ${m.files.join(', ')}`);
+				if ((m.blocked_by ?? []).length > 0) lines.push(`- Blocked by: ${m.blocked_by.join(', ')}`);
+				lines.push('');
+			}
+		}
+
+		const gates = state.gates ?? [];
+		if (gates.length > 0) {
+			lines.push('## Gates so far', '');
+			for (const gate of gates) {
+				lines.push(`- ${gate.milestone}: ${gate.result}${gate.reason ? ` (${gate.reason})` : ''}`);
+			}
+			lines.push('');
+		}
+	}
+	if (journal) {
+		lines.push('## Journal', '');
+		lines.push(`- Entries: ${journal.total}`);
+		lines.push(`- Dispatches: ${journal.dispatches}`);
+		if (journal.agents?.length > 0) lines.push(`- Roles dispatched: ${journal.agents.join(', ')}`);
+		lines.push('');
+	}
+	lines.push('## What the successor must not do', '');
+	lines.push('');
+	lines.push('- Do not re-scope the campaign. The objective and the plan are decided.');
+	lines.push('- Do not re-plan the milestones. Ownership is fixed; a new owner means two agents on one file.');
+	lines.push('- Do not mark anything done without a verification record naming it.');
+	lines.push('');
+	lines.push('## First action', '');
+	lines.push('');
+	lines.push('Read campaign.json and plan.json, then continue the first open milestone.');
+	return lines.join('\n');
+}
+
 /**
  * Assemble the inputs assessStaleness needs from a state directory.
  *
