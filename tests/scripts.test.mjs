@@ -459,5 +459,46 @@ check('report D has R3 violation', !!r3Violation);
 
 rmSync(gitAuditDir, {recursive: true, force: true});
 
+// ---------------------------------------------------------------------------
+// T7: teamwork.mjs progress <beat|set>
+// ---------------------------------------------------------------------------
+console.log('\n=== T7: teamwork.mjs progress ===');
+const progDir = mkdtempSync(join(tmpdir(), 'teamwork-progress-test-'));
+const progTeamwork = join(progDir, '.teamwork');
+mkdirSync(progTeamwork, {recursive: true});
+
+// 1. progress set --milestone m1 --status in-progress
+const setRes = spawnSync(process.execPath, [CLI, 'progress', 'set', '--milestone', 'm1', '--status', 'in-progress'], {
+  cwd: progDir,
+  encoding: 'utf8',
+});
+check('progress set in-progress exits 0', setRes.status === 0);
+check('progress.json was created', existsSync(join(progTeamwork, 'progress.json')));
+
+const progData1 = JSON.parse(readFileSync(join(progTeamwork, 'progress.json'), 'utf8'));
+check('milestone m1 status is in-progress', progData1.milestones?.m1?.status === 'in-progress');
+check('milestone m1 has start_snapshot', Boolean(progData1.milestones?.m1?.start_snapshot));
+
+// 2. progress beat --milestone m1 --note "halfway done"
+const beatRes = spawnSync(process.execPath, [CLI, 'progress', 'beat', '--milestone', 'm1', '--note', 'halfway done'], {
+  cwd: progDir,
+  encoding: 'utf8',
+});
+check('progress beat exits 0', beatRes.status === 0);
+const progData2 = JSON.parse(readFileSync(join(progTeamwork, 'progress.json'), 'utf8'));
+check('progress beat updated note', progData2.milestones?.m1?.note === 'halfway done');
+
+// 3. progress set --milestone m1 --status done
+const setDoneRes = spawnSync(process.execPath, [CLI, 'progress', 'set', '--milestone', 'm1', '--status', 'done'], {
+  cwd: progDir,
+  encoding: 'utf8',
+});
+check('progress set done exits 0', setDoneRes.status === 0);
+const progData3 = JSON.parse(readFileSync(join(progTeamwork, 'progress.json'), 'utf8'));
+check('milestone m1 status is done', progData3.milestones?.m1?.status === 'done');
+check('milestone m1 has end_snapshot', Boolean(progData3.milestones?.m1?.end_snapshot));
+
+rmSync(progDir, {recursive: true, force: true});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

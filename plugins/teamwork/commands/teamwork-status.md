@@ -12,6 +12,7 @@ Read whatever exists, and say plainly when something is missing rather than gues
 - `.teamwork/ownership.json` — active file leases
 - `.teamwork/verifications/*.md` — one per verified milestone
 - `.teamwork/final-audit.md` — the final verdict
+- `.teamwork/progress.json` — heartbeats, progress snapshots, and stall tracking
 - the last 20 lines of `.teamwork/events.jsonl` — recent claims, denials and expiries
 
 Then print a compact report in this shape:
@@ -30,6 +31,7 @@ Followed by:
 2. **Ownership** — the ownership table, and which of those files currently hold a lease, with the holder and how long ago it was claimed.
 3. **Verification gaps** — run `node <path-to-cli>/scripts/teamwork.mjs gate --json` to get the authoritative verification gaps (G1-G12) and report them directly, rather than computing them by hand. If there are none and gate passes, say so explicitly.
 4. **Recent events** — anything from `events.jsonl` worth acting on, especially `denied` entries, which mean two Workers actually collided, and repeated `expired` entries on the same file, which mean a Worker keeps dying.
+5. **Stall alerts** — any milestone with status `in-progress` whose last heartbeat in `progress.json` exceeds `stall_minutes`, reporting the milestone ID and elapsed stall duration.
 
 If `.teamwork/campaign.json` does not exist, say that no campaign is running in this workspace and stop — do not create anything.
 

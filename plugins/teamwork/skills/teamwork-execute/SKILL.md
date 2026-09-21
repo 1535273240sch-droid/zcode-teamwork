@@ -25,9 +25,9 @@ Confirm all four, and stop if any is missing:
 
 Run one milestone through these five steps, then take the next one the dependency graph has unblocked.
 
-**1. Dispatch.** Check `.teamwork/mode.json` before dispatching. If `max_parallel` is set (e.g., degraded to 1 due to weak attribution), never exceed that concurrency limit. Send the milestone to a Worker with its file scope and its acceptance criteria. Dispatch Workers in parallel **only** where the ownership table gives them disjoint files and `mode.json` permits. A milestone whose `blocked_by` is not yet done does not start.
+**1. Dispatch.** Check `.teamwork/mode.json` before dispatching. If `max_parallel` is set (e.g., degraded to 1 due to weak attribution), never exceed that concurrency limit. Set milestone status via `teamwork.mjs progress set --milestone <id> --status in-progress` to record the start snapshot. Send the milestone to a Worker with its file scope and its acceptance criteria. Dispatch Workers in parallel **only** where the ownership table gives them disjoint files and `mode.json` permits. A milestone whose `blocked_by` is not yet done does not start.
 
-**2. Implement.** The Worker changes only its own files, using the `Edit` and `Write` tools, and reports what changed, the exact verification command, and its raw output. A Worker that needs a file outside its scope stops and reports a conflict instead of taking it. Workers are strictly prohibited from writing to `.teamwork/evidence/**`, `.teamwork/approval.json`, `.teamwork/verifications/**`, and `.teamwork/final-audit.md`.
+**2. Implement.** The Worker changes only its own files, using the `Edit` and `Write` tools, periodically emitting heartbeats via `teamwork.mjs progress beat --milestone <id> [--note "<text>"]`, and reports what changed, the exact verification command, and its raw output. A Worker that needs a file outside its scope stops and reports a conflict instead of taking it. Workers are strictly prohibited from writing to `.teamwork/evidence/**`, `.teamwork/approval.json`, `.teamwork/verifications/**`, and `.teamwork/final-audit.md`.
 
 **3. Verify.** Route the milestone to the role that matches what is actually in doubt — Critic for implementation defects, Challenger for a load-bearing premise, Auditor to reproduce the evidence. **Never the Worker that built it.** The verifier runs proof commands via `teamwork.mjs run -- <cmd>` to record hash-chained evidence, then calls `teamwork.mjs verify --milestone <id> --role <role> --verdict <verdict> --evidence <ids> [--body "text"]` to record the verification. **Never write verification files by hand.**
 
@@ -42,7 +42,7 @@ Run one milestone through these five steps, then take the next one the dependenc
 | Challenger `UNFALSIFIABLE` | The claim cannot be tested. Report it to the human; do not silently proceed. |
 | Auditor `BLOCKED` | The verification command is missing or unreproducible. That is itself a milestone failure: fix the acceptance criterion or the evidence, then re-verify. |
 
-**5. Record.** Update `plan.json`. A milestone is done only when `verified: true` and a verification file exists.
+**5. Record.** Update `plan.json`. Record completion snapshot via `teamwork.mjs progress set --milestone <id> --status done`. A milestone is done only when `verified: true` and a verification file exists. Write `.teamwork/handoff.md` recording current status, next steps, excluded approaches, and open questions, then consider compacting conversation context (`/compact`) before starting the next milestone.
 
 ## Rework ceiling
 

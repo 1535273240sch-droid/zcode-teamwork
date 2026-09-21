@@ -93,6 +93,37 @@ if (existsSync(paths.mode)) {
 	} catch {}
 }
 
+const progressPath = join(paths.stateDir, 'progress.json');
+if (existsSync(progressPath)) {
+	try {
+		const prog = readJson(progressPath);
+		const stallMinutes = Number(campaign?.stall_minutes) || 30;
+		const stallMs = Math.max(5, Math.min(1440, stallMinutes)) * 60 * 1000;
+		const now = Date.now();
+		for (const [mId, mData] of Object.entries(prog.milestones || {})) {
+			if (mData.status === 'in-progress' && mData.last_heartbeat) {
+				const hb = new Date(mData.last_heartbeat).getTime();
+				if (now - hb > stallMs) {
+					lines.push('');
+					lines.push(`Stall alert: \u91cc\u7a0b\u7891 ${mId} \u7591\u4f3c\u5361\u6b7b\uff0c\u5efa\u8bae\u91cd\u6d3e\u3002`);
+				}
+			}
+		}
+	} catch {}
+}
+
+const handoffPath = join(paths.stateDir, 'handoff.md');
+if (existsSync(handoffPath)) {
+	try {
+		const handoffText = readFileSync(handoffPath, 'utf8').trim();
+		if (handoffText.length > 0) {
+			lines.push('');
+			lines.push('Milestone handoff context (.teamwork/handoff.md):');
+			lines.push(handoffText);
+		}
+	} catch {}
+}
+
 if (Array.isArray(campaign.acceptance_criteria) && campaign.acceptance_criteria.length > 0) {
 	lines.push('');
 	lines.push('Acceptance criteria (judged against real evidence, not summaries):');

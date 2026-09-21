@@ -810,6 +810,47 @@ reset();
 		check('session-context includes serial degradation notice', ctxText.includes('串行') && ctxText.includes('同一时刻只派一个 Worker'));
 	}
 
+	// ---------------------------------------------------------------------------
+	// T7: Stall alert & handoff.md in session-context
+	// ---------------------------------------------------------------------------
+	console.log('\nprogress stall & handoff - session-context');
+	{
+		reset({
+			withCampaign: true,
+			withApproval: true,
+			over: {approved: true, phase: 'execution', stall_minutes: 10},
+		});
+
+		// 1. Stalled milestone
+		const PROG_FILE = join(STATE, 'progress.json');
+		const staleTime = new Date(Date.now() - 30 * 60 * 1000).toISOString(); // 30 mins ago
+		writeFileSync(
+			PROG_FILE,
+			JSON.stringify({
+				milestones: {
+					m1: {
+						status: 'in-progress',
+						last_heartbeat: staleTime,
+					},
+				},
+			}),
+			'utf8',
+		);
+
+		// 2. Handoff file
+		const HANDOFF_FILE = join(STATE, 'handoff.md');
+		writeFileSync(HANDOFF_FILE, '# Milestone 1 Handoff\nNext step is m2.', 'utf8');
+
+		const r = run('session-context.mjs', {
+			...payload(),
+			hook_event_name: 'SessionStart',
+			source: 'startup',
+		});
+		const ctx = parse(r.stdout)?.hookSpecificOutput?.additionalContext ?? '';
+		check('session-context: stall alert injected', ctx.includes('疑似卡死') && ctx.includes('m1'));
+		check('session-context: handoff context injected', ctx.includes('Milestone 1 Handoff') && ctx.includes('Next step is m2.'));
+	}
+
 // ---------------------------------------------------------------------------
 
 rmSync(WORK, {recursive: true, force: true});

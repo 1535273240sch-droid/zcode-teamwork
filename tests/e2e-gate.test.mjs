@@ -219,5 +219,27 @@ function setupTestRepo(integrityMode = 'development') {
   rmSync(dir, {recursive: true, force: true});
 }
 
+// 9. Scenario 9: Stalled milestone in progress.json -> FAIL (G11)
+{
+  const {dir, twDir} = setupTestRepo();
+  const staleTime = new Date(Date.now() - 40 * 60 * 1000).toISOString(); // 40m ago, default threshold 30m
+  writeFileSync(
+    join(twDir, 'progress.json'),
+    JSON.stringify({
+      milestones: {
+        m1: {
+          status: 'in-progress',
+          last_heartbeat: staleTime,
+        },
+      },
+    }),
+    'utf8'
+  );
+
+  const res = spawnSync(process.execPath, [CLI, 'gate'], {cwd: dir, encoding: 'utf8'});
+  check('Scenario 9: stalled milestone -> FAIL (G11)', res.status === 1 && res.stdout.includes('G11'));
+  rmSync(dir, {recursive: true, force: true});
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
