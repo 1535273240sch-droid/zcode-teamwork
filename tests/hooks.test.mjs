@@ -763,6 +763,209 @@ reset();
 
 // ---------------------------------------------------------------------------
 
+console.log('\naudit-log.mjs - tool trail');
+// The trail is what the budget and the progress watch both read, so a silently
+// empty log would disable two other mechanisms without failing anything.
+function trail() {
+	if (!existsSync(EVENTS)) return [];
+	return readFileSync(EVENTS, 'utf8')
+		.split('\n')
+		.filter((l) => l.length > 0)
+		.map((l) => JSON.parse(l));
+}
+
+reset();
+{
+	run('audit-log.mjs', {...payload(), hook_event_name: 'PostToolUse', tool_name: 'Write', tool_input: {file_path: 'src/core.ts'}});
+	const entries = trail();
+	check('audit: records a tool call', entries.length === 1, JSON.stringify(entries));
+	check('audit: names the tool', entries[0]?.tool === 'Write', JSON.stringify(entries[0]));
+	check('audit: records the target file', entries[0]?.file === 'src/core.ts', JSON.stringify(entries[0]));
+}
+
+reset();
+{
+	run('audit-log.mjs', {...payload(), hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: {command: 'npm test'}});
+	const e = trail()[0];
+	check('audit: records a shell command', e?.command === 'npm test', JSON.stringify(e));
+	check('audit: does not invent a file for a shell command', e?.file === undefined, JSON.stringify(e));
+}
+
+reset();
+{
+	run('audit-log.mjs', {...payload(), hook_event_name: 'PostToolUse', tool_name: 'Task', tool_input: {subagent_type: 'worker', description: 'port the loader'}});
+	const e = trail()[0];
+	check('audit: marks a dispatch distinctly', e?.event === 'dispatch', JSON.stringify(e));
+	check('audit: records the dispatched role', e?.agent === 'worker', JSON.stringify(e));
+}
+
+reset();
+{
+	const long = 'x'.repeat(400);
+	run('audit-log.mjs', {...payload(), hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: {command: long}});
+	const e = trail()[0];
+	check('audit: truncates a long command', typeof e?.command === 'string' && e.command.length < 200, String(e?.command?.length));
+}
+
+{
+	// Outside a campaign there is nothing to audit against, and every unrelated
+	// project would otherwise accumulate a trail.
+	reset({withCampaign: false});
+	const r = run('audit-log.mjs', {...payload(), hook_event_name: 'PostToolUse'});
+	check('audit: inert without a campaign', r.stdout === '{}' && !existsSync(EVENTS), r.stdout);
+}
+
+{
+	reset();
+	const r = run('audit-log.mjs', {...payload(), hook_event_name: 'PostToolUse'});
+	check('audit: never blocks a completed call', parse(r.stdout)?.decision === undefined, r.stdout);
+}
+
+// ---------------------------------------------------------------------------
+
+console.log('\nspawn-budget.mjs - dispatch ceiling');
+// A campaign that has lost its way keeps dispatching; the ceiling is the one
+// number that makes the cost visible to something other than the invoice.
+
+function dispatchEntries(n) {
+	mkdirSync(STATE, {recursive: true});
+	const lines = [];
+	for (let i = 0; i < n; i++) lines.push(JSON.stringify({event: 'dispatch', tool: 'Task', agent: 'worker'}));
+	writeFileSync(EVENTS, lines.join('\n') + '\n');
+}
+
+function taskPayload(over = {}) {
+	return payload({hook_event_name: 'PreToolUse', tool_name: 'Task', tool_input: {subagent_type: 'worker', description: 'x'}, ...over});
+}
+
+{
+	reset({over: {spawnBudget: 3}});
+	{
+		const r = run('spawn-budget.mjs', taskPayload());
+		check('budget: allows a dispatch well inside the ceiling', parse(r.stdout)?.hookSpecificOutput?.permissionDecision !== 'deny', r.stdout);
+	}
+}
+
+{
+	reset({over: {spawnBudget: 3}});
+	dispatchEntries(3);
+	const r = run('spawn-budget.mjs', taskPayload());
+	const out = parse(r.stdout) ?? {};
+	check('budget: denies at the ceiling', out.hookSpecificOutput?.permissionDecision === 'deny', r.stdout.slice(0, 240));
+	check('budget: explains how to raise it', /spawnBudget/.test(String(out.hookSpecificOutput?.permissionDecisionReason)), out.hookSpecificOutput?.permissionDecisionReason);
+}
+
+{
+	reset({over: {spawnBudget: 4}});
+	dispatchEntries(3); // one left, so the next is the last
+	const r = run('spawn-budget.mjs', taskPayload());
+	const out = parse(r.stdout) ?? {};
+	check('budget: warns as the ceiling approaches', /dispatch 4 of 4/.test(String(out.hookSpecificOutput?.additionalContext)), r.stdout.slice(0, 240));
+}
+
+{
+	reset({over: {spawnBudget: 0}});
+	dispatchEntries(50);
+	const r = run('spawn-budget.mjs', taskPayload());
+	check('budget: 0 disables the ceiling entirely', r.stdout === '{}', r.stdout);
+}
+
+{
+	// The default applies when the campaign says nothing, so a campaign that never
+	// considered cost is still bounded.
+	reset();
+	dispatchEntries(16);
+	const r = run('spawn-budget.mjs', taskPayload());
+	check('budget: the default ceiling applies when unset', parse(r.stdout)?.hookSpecificOutput?.permissionDecision === 'deny', r.stdout.slice(0, 200));
+}
+
+{
+	reset({over: {spawnBudget: 2}});
+	dispatchEntries(5);
+	const r = run('spawn-budget.mjs', payload({hook_event_name: 'PreToolUse', tool_name: 'Write'}));
+	check('budget: only governs Task, not every tool', parse(r.stdout)?.hookSpecificOutput?.permissionDecision !== 'deny', r.stdout);
+}
+
+{
+	reset({withCampaign: false, over: {}});
+	dispatchEntries(100);
+	const r = run('spawn-budget.mjs', taskPayload());
+	check('budget: inert without a campaign', r.stdout === '{}', r.stdout);
+}
+
+{
+	// A torn tail line is a normal consequence of an interrupted run and must not be
+	// counted as a dispatch.
+	reset({over: {spawnBudget: 1}});
+	mkdirSync(STATE, {recursive: true});
+	writeFileSync(EVENTS, JSON.stringify({event: 'dispatch'}) + '\n{"event":"disp');
+	const r = run('spawn-budget.mjs', taskPayload());
+	check('budget: ignores a torn log line', parse(r.stdout)?.hookSpecificOutput?.permissionDecision === 'deny', r.stdout.slice(0, 200));
+}
+
+// ---------------------------------------------------------------------------
+
+console.log('\nprogress-watch.mjs - staleness report');
+// The strongest available substitute for a dead-man timer on a platform where a
+// hook is a one-shot process. It reports at the user's turn, not on a clock.
+
+function contextOf(out) {
+	return parse(out)?.hookSpecificOutput?.additionalContext ?? '';
+}
+
+{
+	reset();
+	writeFileSync(PLAN, JSON.stringify({milestones: [{id: 'm1', status: 'pending'}]}));
+	const r = run('progress-watch.mjs', {...payload(), hook_event_name: 'UserPromptSubmit'});
+	check('watch: reports when no trail exists at all', /no hook events have been recorded/.test(contextOf(r.stdout)), r.stdout.slice(0, 300));
+	check('watch: mentions the trust prompt as a possible cause', /trust/.test(contextOf(r.stdout)), contextOf(r.stdout));
+}
+
+{
+	reset();
+	writeFileSync(PLAN, JSON.stringify({milestones: [{id: 'm1', status: 'done'}]}));
+	const r = run('progress-watch.mjs', {...payload(), hook_event_name: 'UserPromptSubmit'});
+	check('watch: silent when no milestone is open', r.stdout === '{}', r.stdout.slice(0, 200));
+}
+
+{
+	reset();
+	writeFileSync(PLAN, JSON.stringify({milestones: [{id: 'm1', status: 'pending'}]}));
+	mkdirSync(STATE, {recursive: true});
+	writeFileSync(EVENTS, JSON.stringify({event: 'tool', tool: 'Write'}) + '\n');
+	const r = run('progress-watch.mjs', {...payload(), hook_event_name: 'UserPromptSubmit'});
+	const ctx = contextOf(r.stdout);
+	check('watch: flags the missing verification records', /has a verification record yet/.test(ctx), ctx.slice(0, 300));
+	check('watch: does not cry wolf about freshness on a fresh trail', !/minutes while/.test(ctx), ctx.slice(0, 300));
+}
+
+{
+	reset();
+	writeFileSync(PLAN, JSON.stringify({milestones: [{id: 'm1', status: 'pending'}]}));
+	mkdirSync(join(STATE, 'verifications'), {recursive: true});
+	writeFileSync(join(STATE, 'verifications', 'm1.md'), 'm1\nVerdict: SOUND\n');
+	// A trail must exist too, or the "no hook events" note fires legitimately and
+	// the assertion would be about the wrong signal.
+	writeFileSync(EVENTS, JSON.stringify({event: 'tool', tool: 'Write'}) + '\n');
+	const r = run('progress-watch.mjs', {...payload(), hook_event_name: 'UserPromptSubmit'});
+	check('watch: silent once a verification record exists', r.stdout === '{}', r.stdout.slice(0, 200));
+}
+
+{
+	reset({over: {progressWatch: false}});
+	writeFileSync(PLAN, JSON.stringify({milestones: [{id: 'm1', status: 'pending'}]}));
+	const r = run('progress-watch.mjs', {...payload(), hook_event_name: 'UserPromptSubmit'});
+	check('watch: honoured when the campaign turns it off', r.stdout === '{}', r.stdout.slice(0, 200));
+}
+
+{
+	reset();
+	const r = run('progress-watch.mjs', {...payload(), hook_event_name: 'UserPromptSubmit'});
+	check('watch: tolerant of a missing plan', r.stdout === '{}', r.stdout.slice(0, 200));
+}
+
+// ---------------------------------------------------------------------------
+
 rmSync(WORK, {recursive: true, force: true});
 
 console.log(`\n${pass} passed, ${fail} failed`);

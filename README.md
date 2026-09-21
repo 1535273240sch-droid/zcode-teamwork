@@ -38,13 +38,37 @@ Teamwork 强制把「做」和「验」分开：
 | ✅ **Auditor** | 审计留痕 |
 | 🏆 **Success-Auditor** | 对着最初的宪章做终审，防指标漂移 |
 
-## 三个机制
+## 机制
+
+**编排**
 
 - **五种编排形态**：串行 / 并行 / 流水线 / 轮换 / 混合
 - **三种完整性模式**：快速 / 标准 / 严格（默认 `development`）
-- **文件独占锁**：两个 `PreToolUse` 钩子，编辑工具和 shell 写入都拦，并行不互相踩踏
-- **验证门禁**：`Stop` 钩子。状态文件声称某个里程碑已完成、但磁盘上没有验证记录时，**拦住本轮收尾**并列出缺口。规则从"写在提示词里"变成"代码强制"。
-  - 想关掉：环境变量 `TEAMWORK_VERIFY_GATE=off`，或 `campaign.json` 里设 `"verificationGate": false`
+- **拆解器** `lib/decompose.mjs`：目标 → 里程碑草稿（含验收标准、依赖链）。**是脚手架不是神谕**，Orchestrator 必须修正它。
+- **调度器** `lib/scheduler.mjs`：依赖分批 + **共享文件检测** + 派发预算核算。两个里程碑点了同一个文件就不可能"并行"——这点在派发前查出来，比等 Worker 撞车便宜得多。
+- **计划 CLI** `lib/plan-cli.mjs`：`draft` / `schedule` / `status` 三个视图，支持 `--json`。
+
+**强制**（全部由钩子代码执行，不靠自觉）
+
+| 钩子 | 事件 | 作用 |
+| --- | --- | --- |
+| `ownership-lock` | PreToolUse | 文件独占，编辑工具越界即拒 |
+| `bash-guard` | PreToolUse | shell 写入同样受独占约束 |
+| `spawn-budget` | PreToolUse | **派发预算硬上限**（默认 16），到顶即拒 |
+| `verification-gate` | **Stop** | 声称完成但无验证记录 → **拦住收尾** |
+| `audit-log` | PostToolUse | 自动留痕到 `events.jsonl`，含文件/命令/派发 |
+| `progress-watch` | UserPromptSubmit | 停滞检测 + 验证覆盖度提示 |
+| `session-context` | SessionStart | 注入宪章与状态 |
+
+**关掉某个机制**
+
+| 机制 | 关闭方式 |
+| --- | --- |
+| 验证门禁 | `TEAMWORK_VERIFY_GATE=off` 或 `campaign.json: {"verificationGate": false}` |
+| 派发预算 | `TEAMWORK_SPAWN_BUDGET=off` 或 `campaign.json: {"spawnBudget": 0}` |
+| 进度看护 | `TEAMWORK_PROGRESS_WATCH=off` 或 `campaign.json: {"progressWatch": false}` |
+
+> **诚实的边界**：钩子是一次性进程，**没有常驻计时器**。所以没有"静默 600 秒自动接管"这种 dead-man 开关——`progress-watch` 只能在下一个用户回合报告停滞。这比计时器弱，但是当前平台上能做到的最强形态。
 
 ---
 
@@ -92,9 +116,11 @@ Teamwork 强制把「做」和「验」分开：
 plugins/teamwork/          # 插件本体
   agents/                  # 8 个角色定义
   commands/                # /teamwork、/teamwork-status、/teamwork-end
-  hooks/                   # 文件独占锁 + shell 写入守卫 + 会话上下文 + 验证门禁
+  hooks/                   # 7 个钩子（独占锁 / shell 守卫 / 上下文 / 门禁 / 留痕 / 预算 / 看护）
+  lib/                     # 纯函数库（拆解 / 调度 / 计划 CLI）
   skills/                  # 访谈与执行协议
-tests/                     # 结构校验 + 钩子行为测试
+plugins/hook-probe/        # 开发者工具：记录所有钩子事件（排查用，日常不必装）
+tests/                     # 345 项：结构校验 + 钩子行为 + 库与 CLI
 docs/机制说明.md            # 深入机制（含旧版迁移）
 ```
 

@@ -35,6 +35,11 @@ export const FINAL_AUDIT_NAME = 'final-audit.md';
 export const DEFAULT_LEASE_MINUTES = 10;
 export const MIN_LEASE_MINUTES = 1;
 export const MAX_LEASE_MINUTES = 10080; // 7 days; a typo like 100000 must not deadlock a campaign
+
+// Dispatches a campaign may start before the spawn-budget hook stops it. Task is
+// where nearly all of a campaign's cost lives, and a run that has lost its way
+// keeps dispatching because each individual Worker looks locally justified.
+export const DEFAULT_SPAWN_BUDGET = 16;
 const MUTEX_RETRIES = 50;
 const MUTEX_WAIT_MS = 20;
 const MUTEX_STALE_MS = 10_000;

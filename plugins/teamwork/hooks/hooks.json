@@ -1,5 +1,5 @@
 {
-  "description": "Teamwork - exclusive file ownership, Bash write guard, campaign context, and the verification gate",
+  "description": "Teamwork - exclusive file ownership, Bash write guard, campaign context, verification gate, audit trail, spawn budget, and progress watch",
   "hooks": {
     "SessionStart": [
       {
@@ -11,6 +11,20 @@
             "args": ["${ZCODE_PLUGIN_ROOT}/hooks/session-context.mjs"],
             "timeoutMs": 5000,
             "statusMessage": "Loading Teamwork charter..."
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "process",
+            "command": "node",
+            "args": ["${ZCODE_PLUGIN_ROOT}/hooks/progress-watch.mjs"],
+            "timeoutMs": 5000,
+            "statusMessage": "Checking campaign progress..."
           }
         ]
       }
@@ -37,6 +51,31 @@
             "args": ["${ZCODE_PLUGIN_ROOT}/hooks/bash-guard.mjs"],
             "timeoutMs": 5000,
             "statusMessage": "Checking shell writes against file ownership..."
+          }
+        ]
+      },
+      {
+        "matcher": "Task",
+        "hooks": [
+          {
+            "type": "process",
+            "command": "node",
+            "args": ["${ZCODE_PLUGIN_ROOT}/hooks/spawn-budget.mjs"],
+            "timeoutMs": 5000,
+            "statusMessage": "Checking spawn budget..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "process",
+            "command": "node",
+            "args": ["${ZCODE_PLUGIN_ROOT}/hooks/audit-log.mjs"],
+            "timeoutMs": 5000
           }
         ]
       }
