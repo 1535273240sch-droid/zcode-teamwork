@@ -7,9 +7,15 @@
       "name": "teamwork",
       "source": "./teamwork",
       "description": "Collaborative multi-agent team: scoping interview, role roster, exclusive file ownership enforced for both editor and shell writes, file-backed verification, and verification-driven convergence.",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "category": "Developer Tools",
-      "tags": ["multi-agent", "orchestration", "long-horizon", "verification", "research"]
+      "tags": [
+        "multi-agent",
+        "orchestration",
+        "long-horizon",
+        "verification",
+        "research"
+      ]
     },
     {
       "name": "hook-probe",
@@ -17,7 +23,11 @@
       "description": "Developer tool: records every hook event ZCode delivers to a third-party plugin and exercises the return-value channels (block, deny, updatedInput, additionalContext). Install only when debugging hook behaviour.",
       "version": "0.1.0",
       "category": "Developer Tools",
-      "tags": ["hook", "debug", "developer-tool"]
+      "tags": [
+        "hook",
+        "debug",
+        "developer-tool"
+      ]
     }
   ]
 }

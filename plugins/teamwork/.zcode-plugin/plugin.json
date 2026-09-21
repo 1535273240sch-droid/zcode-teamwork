@@ -1,6 +1,6 @@
 {
   "name": "teamwork",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Collaborative multi-agent team for repo-scale migrations, simulation, and deep research. Scoping interview, eight roles, exclusive file ownership enforced for both editor and shell writes, and file-backed verification. Pairs with Goal Mode for convergence.",
   "author": {
     "name": "Teamwork for ZCode"
@@ -8,7 +8,13 @@
   "homepage": "https://github.com/1535273240sch-droid/zcode-teamwork",
   "repository": "https://github.com/1535273240sch-droid/zcode-teamwork",
   "license": "MIT",
-  "keywords": ["multi-agent", "orchestration", "long-horizon", "verification", "file-ownership"],
+  "keywords": [
+    "multi-agent",
+    "orchestration",
+    "long-horizon",
+    "verification",
+    "file-ownership"
+  ],
   "commands": "commands",
   "skills": "skills",
   "agents": "agents"
