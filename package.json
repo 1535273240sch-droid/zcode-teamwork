@@ -1,6 +1,6 @@
 {
   "name": "zcode-teamwork-market",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "private": true,
   "description": "Teamwork for ZCode - collaborative multi-agent campaigns with independent verification",
   "type": "module",

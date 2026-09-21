@@ -6,7 +6,31 @@ The version lives in **two** places and they must stay in sync: `plugins/teamwor
 is the installed version, and `marketplace.json` is the version the client compares against to decide whether
 to offer an update. Bump both, or installed users will never be told there is a new one.
 
-## [0.3.1] — 2026-09-21
+## [0.3.2] — 2026-09-22
+
+Documentation release. No behaviour change. The 0.3.1 code is unchanged.
+
+The README claimed the code "has never been loaded into a real ZCode". That was
+true when written and is no longer: four rounds of verification on a real install
+confirmed the core mechanism, and seven defects found by those rounds are all fixed
+and re-verified. Leaving the warning up would have understated the project as badly
+as removing it entirely would have overstated it.
+
+- README: replaces the "never loaded" warning with what was actually verified - the
+  Stop gate blocking a turn, with the gate text accumulating in the model's context
+  and pulling it back to work.
+- README: adds a "when to use this" section at the top, ahead of the mechanism
+  description. The question a reader actually has is whether to use it at all, and
+  the cost warning answers a different question. Three questions decide it, with
+  the concurrent-write limitation stated plainly beside them rather than buried.
+- .gitignore: adds `.zcode-probe/`. Installing the plugin with `cp -r .` from a
+  checkout otherwise copies the probe's previous session log into the plugin cache,
+  and the next version ships with stale test residue inside it.
+
+Also recorded from round four: the concurrency fix was verified on a real machine.
+Two Agent calls 71ms apart in one turn - the second was denied with "1 of them in
+flight", and the reservation file was consumed back to empty with exactly one
+dispatch in the trail. The earlier round had both calls admitted.## [0.3.1] — 2026-09-21
 
 Seven defects found by running against a real ZCode install, none of which any unit
 test caught. The core mechanism - a Stop hook that refuses to let a turn end while
