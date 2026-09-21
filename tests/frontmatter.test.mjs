@@ -288,6 +288,29 @@ console.log('\n=== protocol files are pure ASCII ===');
 	const hooksDir = join(PLUGIN, 'hooks');
 	const protocolFiles = [join('hooks', 'hooks.json'), ...readdirSync(hooksDir).filter((f) => f.endsWith('.mjs')).map((f) => join('hooks', f))];
 	check('protocol files: hooks directory was scanned', protocolFiles.length >= 5, protocolFiles.join(', '));
+
+	// Also scan scripts/ directory recursively
+	const scriptsDir = join(PLUGIN, 'scripts');
+	function findMjs(dir, relPrefix = 'scripts') {
+		const result = [];
+		if (!existsSync(dir)) return result;
+		for (const ent of readdirSync(dir, {withFileTypes: true})) {
+			const sub = join(dir, ent.name);
+			const rel = join(relPrefix, ent.name);
+			if (ent.isDirectory()) {
+				result.push(...findMjs(sub, rel));
+			} else if (ent.isFile() && ent.name.endsWith('.mjs')) {
+				result.push(rel);
+			}
+		}
+		return result;
+	}
+	const scriptFiles = findMjs(scriptsDir);
+	if (scriptFiles.length > 0) {
+		check('protocol files: scripts directory was scanned', scriptFiles.length >= 1, scriptFiles.join(', '));
+		protocolFiles.push(...scriptFiles);
+	}
+
 	for (const rel of protocolFiles) {
 		const text = readFileSync(join(PLUGIN, rel), 'utf8');
 		const bad = [...text].filter((c) => c.charCodeAt(0) > 127);
