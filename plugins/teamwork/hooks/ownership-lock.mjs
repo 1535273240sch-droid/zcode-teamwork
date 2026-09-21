@@ -147,18 +147,34 @@ function evaluate() {
 		notes.push(`Teamwork: claimed exclusive ownership of ${filePath}. ${active} files are now held across the campaign.`);
 	}
 
-	// Fail-open detection. With no distinguishing signal, every Worker in this
-	// session resolves to the same owner and the check above can never fire. Say so
-	// rather than letting the campaign believe it is protected.
-	if (reclaimed && ownerSource === 'session' && campaign.pattern === 'distributed-coding') {
-		notes.push(
-			'Teamwork WARNING: ownership attribution is unavailable in this session. ' +
-				'No per-subagent identifier reached the hook, so every Worker resolves to the same owner and ' +
-				'conflicting writes to one file CANNOT be detected. The exclusive-ownership invariant is not in force. ' +
-				'To restore it, run one Worker per ZCode process and set TEAMWORK_OWNER_TOKEN in that process environment, ' +
-				'or assign each Worker a disjoint file scope you can check by hand.',
-		);
-	}
+		// Fail-open detection. With no distinguishing signal, every Worker in this
+		// session resolves to the same owner and the check above can never fire. Say so
+		// rather than letting the campaign believe it is protected.
+		if (reclaimed && ownerSource === 'session' && campaign.pattern === 'distributed-coding') {
+			notes.push(
+				'Teamwork WARNING: ownership attribution is unavailable in this session. ' +
+					'No per-subagent identifier reached the hook, so every Worker resolves to the same owner and ' +
+					'conflicting writes to one file CANNOT be detected. The exclusive-ownership invariant is not in force. ' +
+					'To restore it, run one Worker per ZCode process and set TEAMWORK_OWNER_TOKEN in that process environment, ' +
+					'or assign each Worker a disjoint file scope you can check by hand.',
+			);
+			if (!existsSync(paths.mode)) {
+				try {
+					writeAtomic(
+						paths.mode,
+						JSON.stringify(
+							{
+								max_parallel: 1,
+								reason: 'weak_attribution',
+								since: new Date().toISOString(),
+							},
+							null,
+							2,
+						) + '\n',
+					);
+				} catch {}
+			}
+		}
 
 	if (notes.length === 0) return {action: 'silent'};
 	return {action: 'context', text: notes.join(' ')};

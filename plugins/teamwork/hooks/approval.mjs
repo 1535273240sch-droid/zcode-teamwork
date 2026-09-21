@@ -10,9 +10,9 @@ import {
 	writeAtomic,
 	appendEvent,
 	charterHash,
+	getGitInfo,
 	existsSync,
 } from './_lib.mjs';
-import {spawnSync} from 'node:child_process';
 
 const raw = await readStdin();
 
@@ -57,26 +57,10 @@ if (campaign.phase !== 'scoping' && campaign.phase !== 'execution') {
 	process.exit(0);
 }
 
-function getGitHead(dir) {
-	try {
-		const res = spawnSync('git', ['rev-parse', 'HEAD'], {
-			cwd: dir,
-			encoding: 'utf8',
-			timeout: 3000,
-		});
-		if (res.status === 0 && res.stdout) {
-			const trimmed = res.stdout.trim();
-			if (trimmed.length > 0) return trimmed;
-		}
-	} catch {
-		// git not installed or not in PATH
-	}
-	return null;
-}
-
 try {
 	const hash = charterHash(campaign);
-	const baseSha = getGitHead(cwd);
+	const git = getGitInfo(cwd);
+	const baseSha = git.isGit ? git.head : null;
 	const now = new Date().toISOString();
 
 	const approval = {

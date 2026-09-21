@@ -22,6 +22,57 @@ import {
 } from 'node:fs';
 import {join, dirname, resolve, basename, sep} from 'node:path';
 import {createHash} from 'node:crypto';
+import {spawnSync} from 'node:child_process';
+
+export function getGitExecutable() {
+	if (process.platform === 'win32') {
+		const candidates = [
+			'git',
+			'C:\\Tools\\git\\cmd\\git.exe',
+			'C:\\Program Files\\Git\\cmd\\git.exe',
+			'C:\\Program Files (x86)\\Git\\cmd\\git.exe',
+		];
+		for (const c of candidates) {
+			if (c === 'git' || existsSync(c)) {
+				try {
+					const test = spawnSync(c, ['--version'], {windowsHide: true});
+					if (test.status === 0) return c;
+				} catch {}
+			}
+		}
+	}
+	return 'git';
+}
+
+export function runGit(args, cwd = process.cwd()) {
+	try {
+		const gitBin = getGitExecutable();
+		const res = spawnSync(gitBin, args, {
+			cwd,
+			encoding: 'utf8',
+			windowsHide: true,
+		});
+		if (res.error) {
+			return {ok: false, stdout: '', stderr: String(res.error.message), code: res.status ?? 1};
+		}
+		return {
+			ok: res.status === 0,
+			stdout: res.stdout || '',
+			stderr: res.stderr || '',
+			code: res.status ?? 0,
+		};
+	} catch (err) {
+		return {ok: false, stdout: '', stderr: String(err), code: 1};
+	}
+}
+
+export function getGitInfo(cwd = process.cwd()) {
+	const headRes = runGit(['rev-parse', 'HEAD'], cwd);
+	const head = headRes.ok ? headRes.stdout.trim() : null;
+	const statusRes = runGit(['status', '--porcelain'], cwd);
+	const dirty = statusRes.ok ? statusRes.stdout.trim().length > 0 : false;
+	return {head, dirty, isGit: headRes.ok, hasGit: headRes.ok};
+}
 
 export const STATE_DIR = '.teamwork';
 export const CAMPAIGN_REL = join(STATE_DIR, 'campaign.json');
@@ -33,6 +84,8 @@ export const MUTEX_NAME = '.lock';
 export const VERIFICATIONS_DIR = 'verifications';
 export const FINAL_AUDIT_NAME = 'final-audit.md';
 export const EVIDENCE_DIR = 'evidence';
+export const MODE_NAME = 'mode.json';
+export const OWNERSHIP_AUDIT_NAME = 'ownership-audit.json';
 
 export const DEFAULT_LEASE_MINUTES = 10;
 export const MIN_LEASE_MINUTES = 1;
@@ -56,6 +109,8 @@ export function statePaths(cwd) {
 		events: join(stateDir, EVENTS_NAME),
 		mutex: join(stateDir, MUTEX_NAME),
 		evidenceDir: join(stateDir, EVIDENCE_DIR),
+		mode: join(stateDir, MODE_NAME),
+		ownershipAudit: join(stateDir, OWNERSHIP_AUDIT_NAME),
 	};
 }
 

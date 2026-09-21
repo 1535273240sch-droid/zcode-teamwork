@@ -4,7 +4,7 @@
 import {execFileSync, spawnSync} from 'node:child_process';
 import {join, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {charterHash, canonicalJson, sortKeysDeep} from '../plugins/teamwork/scripts/lib/utils.mjs';
+import {charterHash, canonicalJson, sortKeysDeep, runGit} from '../plugins/teamwork/scripts/lib/utils.mjs';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CLI = join(REPO, 'plugins', 'teamwork', 'scripts', 'teamwork.mjs');
@@ -319,6 +319,145 @@ const checkTampered = spawnSync(process.execPath, [CLI, 'approve', '--check'], {
 check('approve --check exits 1 when charter altered', checkTampered.status === 1);
 
 rmSync(approveDir, {recursive: true, force: true});
+
+// ---------------------------------------------------------------------------
+// T4: teamwork.mjs audit-ownership
+// ---------------------------------------------------------------------------
+console.log('\n=== T4: teamwork.mjs audit-ownership ===');
+// 1. Non-git directory -> SKIPPED_NO_GIT
+const nonGitDir = mkdtempSync(join(tmpdir(), 'teamwork-audit-nongit-'));
+const nonGitTeamwork = join(nonGitDir, '.teamwork');
+mkdirSync(nonGitTeamwork, {recursive: true});
+writeFileSync(
+  join(nonGitTeamwork, 'campaign.json'),
+  JSON.stringify({objective: 'nongit', approved: true, phase: 'execution'}),
+  'utf8'
+);
+const nonGitAudit = spawnSync(process.execPath, [CLI, 'audit-ownership'], {
+  cwd: nonGitDir,
+  encoding: 'utf8',
+});
+check('audit-ownership in non-git directory exits 0', nonGitAudit.status === 0);
+const nonGitReport = JSON.parse(readFileSync(join(nonGitTeamwork, 'ownership-audit.json'), 'utf8'));
+check('audit-ownership report has result=SKIPPED_NO_GIT', nonGitReport.result === 'SKIPPED_NO_GIT');
+rmSync(nonGitDir, {recursive: true, force: true});
+
+// 2. Git directory with various scenarios
+const gitAuditDir = mkdtempSync(join(tmpdir(), 'teamwork-audit-git-'));
+const gitAuditTeamwork = join(gitAuditDir, '.teamwork');
+mkdirSync(gitAuditTeamwork, {recursive: true});
+
+// Initialize git repo
+runGit(['init'], gitAuditDir);
+runGit(['config', 'user.name', 'Teamwork Test'], gitAuditDir);
+runGit(['config', 'user.email', 'test@teamwork.local'], gitAuditDir);
+
+// Create an initial file and commit
+writeFileSync(join(gitAuditDir, 'README.md'), '# Initial', 'utf8');
+runGit(['add', '.'], gitAuditDir);
+runGit(['commit', '-m', 'initial commit'], gitAuditDir);
+const baseHead = runGit(['rev-parse', 'HEAD'], gitAuditDir).stdout.trim();
+
+// Create approval.json and campaign.json
+writeFileSync(
+  join(gitAuditTeamwork, 'campaign.json'),
+  JSON.stringify({
+    objective: 'Audit test',
+    approved: true,
+    phase: 'execution',
+    integrity_mode: 'development',
+  }),
+  'utf8'
+);
+writeFileSync(
+  join(gitAuditTeamwork, 'approval.json'),
+  JSON.stringify({
+    charter_sha256: 'fake-hash',
+    approved_at: new Date().toISOString(),
+    base_sha: baseHead,
+    source: 'manual_fallback',
+  }),
+  'utf8'
+);
+
+// Create plan.json
+const planObj = {
+  sentinel: 'CLEARED',
+  milestones: [
+    {id: 'm1', status: 'done', files: ['src/m1.ts']},
+    {id: 'm2', status: 'pending', files: ['src/m2.ts']},
+  ],
+  ownership: {'src/m1.ts': 'm1', 'src/m2.ts': 'm2'},
+  shared_files: ['shared/'],
+};
+writeFileSync(join(gitAuditTeamwork, 'plan.json'), JSON.stringify(planObj, null, 2), 'utf8');
+
+// Scenario A: Legitimate changes to m1.ts (done) and shared/config.json
+mkdirSync(join(gitAuditDir, 'src'), {recursive: true});
+mkdirSync(join(gitAuditDir, 'shared'), {recursive: true});
+writeFileSync(join(gitAuditDir, 'src', 'm1.ts'), 'export const a = 1;', 'utf8');
+writeFileSync(join(gitAuditDir, 'shared', 'config.json'), '{"key":"val"}', 'utf8');
+
+const auditA = spawnSync(process.execPath, [CLI, 'audit-ownership'], {
+  cwd: gitAuditDir,
+  encoding: 'utf8',
+});
+check('audit-ownership PASS on legitimate changes', auditA.status === 0);
+const reportA = JSON.parse(readFileSync(join(gitAuditTeamwork, 'ownership-audit.json'), 'utf8'));
+check('report A result is PASS and no violations', reportA.result === 'PASS' && reportA.violations.length === 0);
+
+// Scenario B: Worker modified other.txt (not in any milestone or shared_files) -> R1 violation
+writeFileSync(join(gitAuditDir, 'other.txt'), 'unexpected write', 'utf8');
+const auditB = spawnSync(process.execPath, [CLI, 'audit-ownership'], {
+  cwd: gitAuditDir,
+  encoding: 'utf8',
+});
+check('audit-ownership FAIL on other.txt', auditB.status === 1);
+const reportB = JSON.parse(readFileSync(join(gitAuditTeamwork, 'ownership-audit.json'), 'utf8'));
+const r1Violation = reportB.violations.find((v) => v.rule === 'R1' && v.file.includes('other.txt'));
+check('report B has R1 violation for other.txt', !!r1Violation);
+rmSync(join(gitAuditDir, 'other.txt'), {force: true});
+
+// Scenario C: Worker modified src/m2.ts (belongs to pending milestone m2) -> R2 violation
+writeFileSync(join(gitAuditDir, 'src', 'm2.ts'), 'export const m2 = true;', 'utf8');
+const auditC = spawnSync(process.execPath, [CLI, 'audit-ownership'], {
+  cwd: gitAuditDir,
+  encoding: 'utf8',
+});
+check('audit-ownership FAIL on pending milestone file', auditC.status === 1);
+const reportC = JSON.parse(readFileSync(join(gitAuditTeamwork, 'ownership-audit.json'), 'utf8'));
+const r2Violation = reportC.violations.find((v) => v.rule === 'R2' && v.file.includes('m2.ts'));
+check('report C has R2 violation for pending milestone m2', !!r2Violation);
+rmSync(join(gitAuditDir, 'src', 'm2.ts'), {force: true});
+
+// Scenario D: Serial mode R3 violation (m1 modified m2 file)
+writeFileSync(
+  join(gitAuditTeamwork, 'mode.json'),
+  JSON.stringify({max_parallel: 1, reason: 'weak_attribution'}),
+  'utf8'
+);
+writeFileSync(
+  join(gitAuditTeamwork, 'progress.json'),
+  JSON.stringify({
+    milestones: {
+      m1: {
+        start_snapshot: {files: {'src/m2.ts': 'hash-initial'}},
+        end_snapshot: {files: {'src/m2.ts': 'hash-modified'}},
+      },
+    },
+  }),
+  'utf8'
+);
+const auditD = spawnSync(process.execPath, [CLI, 'audit-ownership'], {
+  cwd: gitAuditDir,
+  encoding: 'utf8',
+});
+check('audit-ownership FAIL on R3 (serial mode cross-milestone file change)', auditD.status === 1);
+const reportD = JSON.parse(readFileSync(join(gitAuditTeamwork, 'ownership-audit.json'), 'utf8'));
+const r3Violation = reportD.violations.find((v) => v.rule === 'R3');
+check('report D has R3 violation', !!r3Violation);
+
+rmSync(gitAuditDir, {recursive: true, force: true});
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

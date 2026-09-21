@@ -78,6 +78,16 @@ if (campaign.approved !== true) {
 	lines.push('Approval: NOT APPROVED. The ownership hooks are inert. Do not dispatch Workers yet.');
 }
 
+if (existsSync(paths.mode)) {
+	try {
+		const mode = readJson(paths.mode);
+		if (mode?.max_parallel === 1) {
+			lines.push('');
+			lines.push('Campaign degraded to serial: \u672c campaign \u5df2\u964d\u7ea7\u4e3a\u4e32\u884c\uff0c\u540c\u4e00\u65f6\u523b\u53ea\u6d3e\u4e00\u4e2a Worker\u3002');
+		}
+	} catch {}
+}
+
 if (Array.isArray(campaign.acceptance_criteria) && campaign.acceptance_criteria.length > 0) {
 	lines.push('');
 	lines.push('Acceptance criteria (judged against real evidence, not summaries):');

@@ -764,6 +764,51 @@ reset();
 		check('approval.mjs: malformed stdin writes no approval.json', !existsSync(APPROVAL));
 	}
 
+	// ---------------------------------------------------------------------------
+	// T4: Attribution degradation & mode.json
+	// ---------------------------------------------------------------------------
+	console.log('\nmode.json & degradation - attribution');
+	{
+		reset({
+			withCampaign: true,
+			withApproval: true,
+			over: {approved: true, phase: 'execution', pattern: 'distributed-coding'},
+		});
+		const MODE_FILE = join(STATE, 'mode.json');
+
+		// 1. Weak attribution (ownerSource === 'session') triggers mode.json write
+		const rWeak = run('ownership-lock.mjs', {
+			...payload(),
+			transcript_path: undefined,
+			tool_input: {file_path: 'src/f1.ts', content: 'x'},
+		});
+		check('weak attribution: ownership-lock exits 0', rWeak.code === 0);
+		check('weak attribution: mode.json created', existsSync(MODE_FILE));
+
+		const mode1 = JSON.parse(readFileSync(MODE_FILE, 'utf8'));
+		check('weak attribution: max_parallel is 1', mode1.max_parallel === 1);
+		check('weak attribution: reason is weak_attribution', mode1.reason === 'weak_attribution');
+
+		// 2. Second claim is idempotent (does not rewrite mode.json since timestamp)
+		const rWeak2 = run('ownership-lock.mjs', {
+			...payload(),
+			transcript_path: undefined,
+			tool_input: {file_path: 'src/f2.ts', content: 'x'},
+		});
+		check('weak attribution second claim: exits 0', rWeak2.code === 0);
+		const mode2 = JSON.parse(readFileSync(MODE_FILE, 'utf8'));
+		check('weak attribution: mode.json idempotent (since preserved)', mode1.since === mode2.since);
+
+		// 3. session-context.mjs includes serial instruction when mode.json exists
+		const rCtx = run('session-context.mjs', {
+			...payload(),
+			hook_event_name: 'SessionStart',
+			source: 'startup',
+		});
+		const ctxText = parse(rCtx.stdout)?.hookSpecificOutput?.additionalContext ?? '';
+		check('session-context includes serial degradation notice', ctxText.includes('串行') && ctxText.includes('同一时刻只派一个 Worker'));
+	}
+
 // ---------------------------------------------------------------------------
 
 rmSync(WORK, {recursive: true, force: true});

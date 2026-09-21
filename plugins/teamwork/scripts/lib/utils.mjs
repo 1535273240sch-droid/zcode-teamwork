@@ -12,6 +12,9 @@ export {
   canonicalJson,
   sha256Hex,
   charterHash,
+  getGitExecutable,
+  runGit,
+  getGitInfo,
 } from '../../hooks/_lib.mjs';
 
 export function findTeamworkDir(startDir = process.cwd()) {
@@ -38,33 +41,4 @@ export function findTeamworkDir(startDir = process.cwd()) {
   }
 
   return join(resolve(startDir), '.teamwork');
-}
-
-export function runGit(args, cwd = process.cwd()) {
-  try {
-    const res = spawnSync('git', args, {
-      cwd,
-      encoding: 'utf8',
-      windowsHide: true,
-    });
-    if (res.error) {
-      return {ok: false, stdout: '', stderr: String(res.error.message), code: res.status ?? 1};
-    }
-    return {
-      ok: res.status === 0,
-      stdout: res.stdout || '',
-      stderr: res.stderr || '',
-      code: res.status ?? 0,
-    };
-  } catch (err) {
-    return {ok: false, stdout: '', stderr: String(err), code: 1};
-  }
-}
-
-export function getGitInfo(cwd = process.cwd()) {
-  const headRes = runGit(['rev-parse', 'HEAD'], cwd);
-  const head = headRes.ok ? headRes.stdout.trim() : null;
-  const statusRes = runGit(['status', '--porcelain'], cwd);
-  const dirty = statusRes.ok ? statusRes.stdout.trim().length > 0 : false;
-  return {head, dirty, hasGit: headRes.ok};
 }
