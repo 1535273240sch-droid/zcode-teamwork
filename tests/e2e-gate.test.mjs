@@ -241,5 +241,36 @@ function setupTestRepo(integrityMode = 'development') {
   rmSync(dir, {recursive: true, force: true});
 }
 
+// 10. Scenario 10: risk: "medium" missing auditor -> FAIL (G10)
+{
+  const {dir, twDir, plan} = setupTestRepo();
+  plan.milestones[0].risk = 'medium';
+  // verified_by is only ['critic']
+  writeFileSync(join(twDir, 'plan.json'), JSON.stringify(plan, null, 2), 'utf8');
+
+  const res = spawnSync(process.execPath, [CLI, 'gate'], {cwd: dir, encoding: 'utf8'});
+  check('Scenario 10: risk medium missing auditor -> FAIL (G10)', res.status === 1 && res.stdout.includes('G10'));
+  rmSync(dir, {recursive: true, force: true});
+}
+
+// 11. Scenario 11: risk: "medium" with critic + auditor -> PASS
+{
+  const {dir, twDir, plan, ev1} = setupTestRepo();
+  plan.milestones[0].risk = 'medium';
+  plan.milestones[0].verified_by = ['critic', 'auditor'];
+  writeFileSync(join(twDir, 'plan.json'), JSON.stringify(plan, null, 2), 'utf8');
+
+  // Also record auditor verification
+  spawnSync(
+    process.execPath,
+    [CLI, 'verify', '--milestone', 'm1', '--role', 'auditor', '--verdict', 'REPRODUCED', '--evidence', ev1, '--body', 'reproduced cleanly'],
+    {cwd: dir, encoding: 'utf8'}
+  );
+
+  const res = spawnSync(process.execPath, [CLI, 'gate'], {cwd: dir, encoding: 'utf8'});
+  check('Scenario 11: risk medium with critic + auditor -> PASS', res.status === 0 && res.stdout.includes('TEAMWORK-GATE: PASS'));
+  rmSync(dir, {recursive: true, force: true});
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
