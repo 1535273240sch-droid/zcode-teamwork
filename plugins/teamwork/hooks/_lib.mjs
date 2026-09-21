@@ -314,6 +314,114 @@ export function releaseMutex(paths) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Dispatch reservations
+//
+// The spawn budget's count comes from events.jsonl, which audit-log writes on
+// PostToolUse - after the tool has already run. A single model turn can issue
+// several Agent calls in one batch, and their PreToolUse hooks fire milliseconds
+// apart, long before the first PostToolUse lands. Every one of them therefore reads
+// the same stale count, and a batch of N bypasses any budget. Measured on a real
+// install: two PreToolUse hooks 57ms apart both read zero, and the first write to
+// the trail arrived 1.8s later.
+//
+// The fix is a reservation taken at judgement time rather than at completion time.
+// PreToolUse reserves a slot under the mutex, so the second call in the same batch
+// sees the first one's reservation even though neither has finished. The
+// reservation is consumed when the dispatch is actually recorded, and released when
+// the call is denied; a TTL sweep covers a hook or process that dies in between.
+
+export const RESERVATIONS_NAME = 'spawn-reservations.json';
+
+// A reservation older than this is assumed to belong to a call that will never
+// finish. Generous, because a long-running subagent is not an abandoned one, but
+// bounded, because an abandoned slot must not cost the campaign a dispatch forever.
+export const RESERVATION_TTL_MS = 30 * 60_000;
+
+function reservationsPath(paths) {
+	return join(paths.stateDir, RESERVATIONS_NAME);
+}
+
+function readReservations(paths, now = Date.now()) {
+	const store = readStore(reservationsPath(paths));
+	const live = {};
+	for (const [id, entry] of Object.entries(store)) {
+		const at = Number(entry?.at);
+		if (!Number.isFinite(at)) continue;
+		if (now - at > RESERVATION_TTL_MS) continue;
+		live[id] = entry;
+	}
+	return live;
+}
+
+function writeReservations(paths, store) {
+	writeAtomic(reservationsPath(paths), JSON.stringify(store));
+}
+
+/**
+ * Reserve one dispatch slot.
+ *
+ * Returns the committed count, the live reservation count, and the total the budget
+ * should be judged against. Done under the mutex so two PreToolUse hooks in one
+ * batch cannot both observe the pre-reservation state.
+ */
+export function reserveDispatch(paths, meta = {}) {
+	if (!acquireMutex(paths)) {
+		// Falling back to an unreserved count is still better than blocking the tool:
+		// the budget becomes advisory for this call rather than a hard stop.
+		return {ok: false, reserved: false, count: 0};
+	}
+	try {
+		const live = readReservations(paths);
+		const id = `${process.pid}-${Date.now()}-${Object.keys(live).length}`;
+		live[id] = {at: Date.now(), pid: process.pid, ...meta};
+		writeReservations(paths, live);
+		return {ok: true, reserved: true, id, reservations: Object.keys(live).length};
+	} finally {
+		releaseMutex(paths);
+	}
+}
+
+/** Drop a reservation that will not become a dispatch (the call was denied). */
+export function releaseReservation(paths, id) {
+	if (typeof id !== 'string' || id.length === 0) return;
+	if (!acquireMutex(paths)) return;
+	try {
+		const live = readReservations(paths);
+		if (id in live) {
+			delete live[id];
+			writeReservations(paths, live);
+		}
+	} finally {
+		releaseMutex(paths);
+	}
+}
+
+/**
+ * Consume one reservation, now that the dispatch has been recorded.
+ *
+ * Consuming rather than dropping is what keeps the count honest: the trail entry
+ * and the reservation describe the same dispatch, so counting both would make the
+ * budget stricter than configured by one per dispatch.
+ */
+export function consumeReservation(paths) {
+	if (!acquireMutex(paths)) return;
+	try {
+		const live = readReservations(paths);
+		const ids = Object.keys(live).sort((a, b) => (live[a].at ?? 0) - (live[b].at ?? 0));
+		if (ids.length === 0) return;
+		delete live[ids[0]];
+		writeReservations(paths, live);
+	} finally {
+		releaseMutex(paths);
+	}
+}
+
+/** Reservations still live, for a status report. */
+export function countReservations(paths, now = Date.now()) {
+	return Object.keys(readReservations(paths, now)).length;
+}
+
 export function readLeaseMinutes(campaign) {
 	const value = Number(campaign?.ownership_lease_minutes);
 	if (!Number.isFinite(value) || value <= 0) return DEFAULT_LEASE_MINUTES;

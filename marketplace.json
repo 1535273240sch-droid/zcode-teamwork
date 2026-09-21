@@ -7,7 +7,7 @@
       "name": "teamwork",
       "source": "./teamwork",
       "description": "Collaborative multi-agent team: scoping interview, role roster, exclusive file ownership enforced for both editor and shell writes, file-backed verification, and verification-driven convergence.",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "category": "Developer Tools",
       "tags": [
         "multi-agent",

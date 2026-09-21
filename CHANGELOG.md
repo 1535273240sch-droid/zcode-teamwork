@@ -6,6 +6,63 @@ The version lives in **two** places and they must stay in sync: `plugins/teamwor
 is the installed version, and `marketplace.json` is the version the client compares against to decide whether
 to offer an update. Bump both, or installed users will never be told there is a new one.
 
+## [0.3.1] — 2026-09-21
+
+Seven defects found by running against a real ZCode install, none of which any unit
+test caught. The core mechanism - a Stop hook that refuses to let a turn end while
+the state file claims work that has no verification record - was confirmed working
+on a real machine, and three of the defects below were what had been preventing it
+from working there.
+
+### Fixed
+
+- **The Stop block used `stopReason` instead of `reason`.** ZCode parses both, but
+  only `reason` and `systemMessage` reach `additionalContexts`, and the continuation
+  check requires a non-empty `additionalContexts`. With `stopReason` the block was
+  recorded and the turn ended normally. The whole verification gate was inert.
+  Measured: with `stopReason` a turn completes once; with `reason` the same turn is
+  pulled back four times.
+- **Hooks read `plan.json`; the engine writes `campaign.json`.** Three hooks looked
+  for a file the engine never creates, so a campaign started through the documented
+  CLI path had its gate silently disabled. Milestones now come from campaign.json
+  with plan.json kept as a legacy fallback.
+- **The dispatch tool is named `Agent`, not `Task`.** The matcher in hooks.json was
+  `"Task"`, and a matcher is a case-sensitive regex that does not resolve aliases -
+  so the spawn budget never ran, and no dispatch was ever recorded to count. Two
+  dispatches against a budget of one were both admitted.
+- **`PostToolUseFailure` is never delivered.** A tool that exits non-zero arrives as
+  `PostToolUse` with `tool_response.status: "failed"`. Failure detection now reads
+  the status field. Six of the seven advertised events are reachable, not seven.
+- **The budget could be bypassed by concurrent dispatch.** The count came from the
+  trail, written on PostToolUse, while the judgement read it on PreToolUse. A single
+  turn issuing several Agent calls had all of them read the same stale count -
+  measured at 57ms apart, with the first trail write 1.8s later. PreToolUse now
+  takes a reservation under the mutex, so the second call in a batch sees the first
+  one's reservation; audit-log consumes it when the dispatch is recorded. A batch of
+  N can no longer exceed a budget of N-1.
+- **Project directory resolution was inconsistent and had no env fallback.** Every
+  hook resolved `cwd` its own way and fell back to the process working directory,
+  which is not the workspace root. All seven now use one helper that checks
+  `ZCODE_PROJECT_DIR` and `CLAUDE_PROJECT_DIR` first.
+- **CI ran two of five test suites.** The workflow listed files by name; three suites
+  added later never executed on any runner, so a POSIX-only path assertion sat in a
+  suite that CI reported as passing. The workflow now runs `npm test` and asserts
+  that every test file is wired into it.
+
+### Documented
+
+- Per-subagent attribution does not exist in the payload: no `agent_id`, no
+  `agent_type`, and `session_id` is the parent's. Two subagents in one session
+  resolve to the same owner, which makes the exclusivity check absent rather than
+  weaker. One Worker per ZCode process is the only reliable arrangement.
+- `Stop` fires only at a full turn boundary; a multi-step tool flow does not reach it.
+- Hook execution is not written to ZCode's log directory.
+
+### Tests
+
+797 -> 804, with structural guards on the Stop field, the dispatch tool names, the
+matcher, and the project-directory helper.
+
 ## [0.3.0] — 2026-09-21
 
 The engine release. Through 0.2.0 the rules lived in prose and were checked by hooks; this release

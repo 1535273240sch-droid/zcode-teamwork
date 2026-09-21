@@ -20,7 +20,7 @@
 //
 // ASCII only: this file is a protocol artifact and crosses an encoding boundary.
 
-import {readStdin, statePaths, loadCampaign, appendEvent, existsSync, resolveProjectDir} from './_lib.mjs';
+import {readStdin, statePaths, loadCampaign, appendEvent, existsSync, resolveProjectDir, consumeReservation} from './_lib.mjs';
 
 // Tools whose target file is worth naming in the trail. Everything else is
 // recorded by name alone.
@@ -87,6 +87,10 @@ if (toolName === 'Bash') {
 // dispatch was ever recorded, so the spawn budget counted zero for every campaign.
 if (toolName === 'Task' || toolName === 'Agent') {
 	entry.event = 'dispatch';
+	// The budget reserved this slot at PreToolUse, before the trail entry could
+	// exist. Consuming it here keeps the two counts describing the same dispatch:
+	// leaving both would make the budget stricter than configured by one per call.
+	consumeReservation(paths);
 	const agent = toolInput.subagent_type ?? toolInput.subagentType ?? toolInput.agent;
 	if (typeof agent === 'string' && agent.length > 0) entry.agent = agent;
 	const description = preview(toolInput.description);

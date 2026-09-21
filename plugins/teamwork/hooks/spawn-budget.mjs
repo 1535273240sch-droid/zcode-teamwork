@@ -28,7 +28,7 @@
 
 import {readFileSync, existsSync} from 'node:fs';
 
-import {readStdin, deny, allowWithContext, statePaths, loadCampaign, isCampaignActive, DEFAULT_SPAWN_BUDGET, resolveProjectDir} from './_lib.mjs';
+import {readStdin, deny, allowWithContext, statePaths, loadCampaign, isCampaignActive, DEFAULT_SPAWN_BUDGET, resolveProjectDir, reserveDispatch, countReservations} from './_lib.mjs';
 
 // Warn once the run is close enough to the ceiling that the orchestrator should
 // start planning its last milestones rather than discovering the wall.
@@ -109,17 +109,35 @@ if (!isCampaignActive(campaign)) emit({});
 const budget = readBudget(campaign);
 if (budget === undefined) emit({});
 
-const used = countDispatches(paths.events);
+// The committed count comes from the trail, which is written on PostToolUse - after
+// the call has run. A single turn can issue several Agent calls in one batch, and
+// their PreToolUse hooks fire milliseconds apart, all reading the same stale count.
+// Measured on a real machine: two hooks 57ms apart both read zero, and the first
+// trail entry landed 1.8s later, so a batch of N bypassed any budget.
+//
+// Reservations close that window. This hook takes one before it decides, under the
+// mutex, so the second call in the same batch sees the first one's reservation even
+// though neither has completed. The reservation is consumed by audit-log when the
+// dispatch is recorded, and released here if the call is denied.
+const committed = countDispatches(paths.events);
+const reserved = countReservations(paths);
+const used = committed + reserved;
 
 if (used >= budget) {
 	deny(
-		`Teamwork spawn budget exhausted: ${used} of ${budget} Worker dispatches have been used in this campaign. ` +
+		`Teamwork spawn budget exhausted: ${used} of ${budget} Worker dispatches have been used in this campaign` +
+			(reserved > 0 ? ` (${reserved} of them in flight)` : '') +
+			'. ' +
 			'Do not dispatch another Subagent. Finish the current milestone with the team already assigned, ' +
 			'or report to the human that the objective needs more dispatches than the budget allows - ' +
 			'the budget is a deliberate ceiling, and raising it is their decision, not a workaround. ' +
 			'To raise it, set "spawnBudget" in .teamwork/campaign.json.',
 	);
 }
+
+// Reserve before allowing: the slot must be visible to the next PreToolUse in this
+// batch, which will run before this call's PostToolUse does.
+const reservation = reserveDispatch(paths, {tool: toolName});
 
 if (used + 1 > budget * WARN_FRACTION) {
 	allowWithContext(
@@ -129,4 +147,5 @@ if (used + 1 > budget * WARN_FRACTION) {
 	);
 }
 
+// A denied call never reserves, so there is nothing to release on that path.
 emit({});

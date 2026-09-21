@@ -1057,6 +1057,92 @@ reset();
 	check('audit: marks a failure reported through status', entries[0]?.failed === true, JSON.stringify(entries[0]));
 }
 
+// ---------------------------------------------------------------------------
+
+console.log('\nspawn-budget.mjs - concurrent dispatch in one batch');
+// The budget counted dispatches from the trail, which audit-log writes on
+// PostToolUse. A single turn can issue several Agent calls in one batch and their
+// PreToolUse hooks fire milliseconds apart, all reading the same stale count, so a
+// batch of N bypassed any budget. Measured on a real machine: two hooks 57ms apart
+// both read zero, and the first trail write landed 1.8s later.
+//
+// These tests reproduce that shape: two PreToolUse calls with no PostToolUse
+// between them. The second must see the first one's reservation.
+
+function taskCall(name) {
+	// A distinct tool_use_id per call, as the real payload carries.
+	return payload({
+		hook_event_name: 'PreToolUse',
+		tool_name: name,
+		tool_input: {subagent_type: 'general-purpose', description: 'parallel'},
+	});
+}
+
+{
+	reset({over: {spawnBudget: 1}});
+	const first = run('spawn-budget.mjs', taskCall('Agent'));
+	const second = run('spawn-budget.mjs', taskCall('Agent'));
+
+	const firstOut = parse(first.stdout) ?? {};
+	const secondOut = parse(second.stdout) ?? {};
+
+	check(
+		'budget: the first concurrent dispatch is allowed',
+		firstOut.hookSpecificOutput?.permissionDecision !== 'deny',
+		first.stdout.slice(0, 200),
+	);
+	check(
+		'budget: the second concurrent dispatch is denied',
+		secondOut.hookSpecificOutput?.permissionDecision === 'deny',
+		`expected deny, got ${second.stdout.slice(0, 200)}`,
+	);
+}
+
+{
+	// Three calls, a budget of two: exactly two admitted. Without reservations all
+	// three would pass, because none of their PostToolUse hooks had run yet.
+	reset({over: {spawnBudget: 2}});
+	const results = [run('spawn-budget.mjs', taskCall('Agent')), run('spawn-budget.mjs', taskCall('Agent')), run('spawn-budget.mjs', taskCall('Agent'))];
+	const denied = results.filter((r) => parse(r.stdout)?.hookSpecificOutput?.permissionDecision === 'deny');
+	check('budget: exactly budget-many concurrent calls are admitted', denied.length === 1, `${denied.length} denied of 3`);
+}
+
+{
+	// Once the dispatch is recorded, the reservation is consumed rather than kept,
+	// or the budget would be stricter than configured by one per call.
+	reset({over: {spawnBudget: 2}});
+	run('spawn-budget.mjs', taskCall('Agent'));                       // reserves 1
+	run('audit-log.mjs', {...payload(), hook_event_name: 'PostToolUse', tool_name: 'Agent', tool_input: {subagent_type: 'general-purpose'}});  // commits + consumes
+	const second = run('spawn-budget.mjs', taskCall('Agent'));        // should be allowed: 1 committed, 0 reserved
+	check(
+		'budget: a completed dispatch consumes its reservation',
+		parse(second.stdout)?.hookSpecificOutput?.permissionDecision !== 'deny',
+		second.stdout.slice(0, 200),
+	);
+
+	const third = run('spawn-budget.mjs', taskCall('Agent'));         // 1 committed + 1 reserved = 2
+	check(
+		'budget: the ceiling still applies after the reservation is consumed',
+		parse(third.stdout)?.hookSpecificOutput?.permissionDecision === 'deny',
+		third.stdout.slice(0, 200),
+	);
+}
+
+{
+	// The reservation file is state, not a leak: a fresh campaign starts at zero.
+	reset({over: {spawnBudget: 1}});
+	run('spawn-budget.mjs', taskCall('Agent'));
+	const before = run('spawn-budget.mjs', taskCall('Agent'));
+	check('budget: a second call in the same state is denied', parse(before.stdout)?.hookSpecificOutput?.permissionDecision === 'deny');
+	reset({over: {spawnBudget: 1}});
+	const after = run('spawn-budget.mjs', taskCall('Agent'));
+	check(
+		'budget: a reset campaign reserves afresh',
+		parse(after.stdout)?.hookSpecificOutput?.permissionDecision !== 'deny',
+		after.stdout.slice(0, 200),
+	);
+}
+
 rmSync(WORK, {recursive: true, force: true});
 
 console.log(`\n${pass} passed, ${fail} failed`);
