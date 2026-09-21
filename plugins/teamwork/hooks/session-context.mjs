@@ -124,6 +124,44 @@ if (existsSync(handoffPath)) {
 	} catch {}
 }
 
+function readRecentKnowledge(filePath, maxBytes = 2048) {
+	if (!existsSync(filePath)) return '';
+	try {
+		const raw = readFileSync(filePath, 'utf8');
+		const parts = raw
+			.split(/(?=^## \[)/m)
+			.map((s) => s.trim())
+			.filter(Boolean);
+		parts.reverse();
+		let accumulated = '';
+		for (const part of parts) {
+			if (Buffer.byteLength(accumulated + part + '\n\n', 'utf8') > maxBytes) {
+				break;
+			}
+			accumulated += part + '\n\n';
+		}
+		return accumulated.trim();
+	} catch {
+		return '';
+	}
+}
+
+const pitfalls = readRecentKnowledge(join(paths.stateDir, 'knowledge', 'pitfalls.md'), 2048);
+const failed = readRecentKnowledge(join(paths.stateDir, 'knowledge', 'failed-approaches.md'), 2048);
+
+if (pitfalls.length > 0 || failed.length > 0) {
+	lines.push('');
+	lines.push('Knowledge base (recent entries from previous rounds, newest first):');
+	if (pitfalls.length > 0) {
+		lines.push('### Pitfalls to avoid:');
+		lines.push(pitfalls);
+	}
+	if (failed.length > 0) {
+		lines.push('### Failed approaches:');
+		lines.push(failed);
+	}
+}
+
 if (Array.isArray(campaign.acceptance_criteria) && campaign.acceptance_criteria.length > 0) {
 	lines.push('');
 	lines.push('Acceptance criteria (judged against real evidence, not summaries):');

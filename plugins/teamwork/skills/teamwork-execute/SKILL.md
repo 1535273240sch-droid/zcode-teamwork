@@ -50,9 +50,10 @@ Run one milestone through these five steps, then take the next one the dependenc
 
 At the ceiling, stop reworking and climb the escalation ladder:
 
-1. **Retry the role once, unchanged.** Most failures are transient.
-2. **Send it back to the Orchestrator** to replan — re-split the milestone, reassign the file, or change which role verifies it. Update `plan.json`.
-3. **Stop and escalate.** Run `/goal pause` and report to the human: which milestone is stuck, what was tried, what the blocker actually is, which milestones are done, and what has been spent.
+1. **Record the failed approach in the cross-round knowledge base**: Run `teamwork.mjs knowledge add --type failed --text "<explanation of why this approach failed>"` so subsequent rounds and sessions avoid repeating the same dead end.
+2. **Retry the role once, unchanged.** Most failures are transient.
+3. **Send it back to the Orchestrator** to replan — re-split the milestone, reassign the file, or change which role verifies it. Update `plan.json`.
+4. **Stop and escalate.** Run `/goal pause` and report to the human: which milestone is stuck, what was tried, what the blocker actually is, which milestones are done, and what has been spent.
 
 **Never let a failing milestone loop.** The per-round verifier will open another round indefinitely, so an unresolved failure turns into a burn-the-budget loop that produces nothing. Two rework rounds and a replan is the ceiling; past that it is a human decision, not an agent decision.
 

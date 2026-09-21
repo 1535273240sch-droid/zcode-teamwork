@@ -500,5 +500,50 @@ check('milestone m1 has end_snapshot', Boolean(progData3.milestones?.m1?.end_sna
 
 rmSync(progDir, {recursive: true, force: true});
 
+// ---------------------------------------------------------------------------
+// T9: teamwork.mjs knowledge <add|list>
+// ---------------------------------------------------------------------------
+console.log('\n=== T9: teamwork.mjs knowledge ===');
+const knowDir = mkdtempSync(join(tmpdir(), 'teamwork-knowledge-test-'));
+const knowTeamwork = join(knowDir, '.teamwork');
+mkdirSync(knowTeamwork, {recursive: true});
+
+// 1. add pitfall without answer
+const addPitfall = spawnSync(
+  process.execPath,
+  [CLI, 'knowledge', 'add', '--type', 'pitfall', '--text', 'Do not use regex for HTML parsing'],
+  {cwd: knowDir, encoding: 'utf8'}
+);
+check('knowledge add pitfall exits 0', addPitfall.status === 0);
+check('pitfalls.md created', existsSync(join(knowTeamwork, 'knowledge', 'pitfalls.md')));
+
+// 2. add pitfall with answer pattern -> warning on stderr
+const addBadPitfall = spawnSync(
+  process.execPath,
+  [CLI, 'knowledge', 'add', '--type', 'pitfall', '--text', 'The expected value is 42'],
+  {cwd: knowDir, encoding: 'utf8'}
+);
+check('knowledge add bad pitfall exits 0', addBadPitfall.status === 0);
+check('knowledge add bad pitfall emits warning', addBadPitfall.stderr.includes('WARNING'));
+
+// 3. add failed approach
+const addFailed = spawnSync(
+  process.execPath,
+  [CLI, 'knowledge', 'add', '--type', 'failed', '--text', 'Tried greedy search; hit exponential blowup'],
+  {cwd: knowDir, encoding: 'utf8'}
+);
+check('knowledge add failed exits 0', addFailed.status === 0);
+check('failed-approaches.md created', existsSync(join(knowTeamwork, 'knowledge', 'failed-approaches.md')));
+
+// 4. list knowledge
+const listRes = spawnSync(process.execPath, [CLI, 'knowledge', 'list'], {
+  cwd: knowDir,
+  encoding: 'utf8',
+});
+check('knowledge list exits 0', listRes.status === 0);
+check('knowledge list outputs added entries', listRes.stdout.includes('HTML parsing') && listRes.stdout.includes('exponential blowup'));
+
+rmSync(knowDir, {recursive: true, force: true});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

@@ -891,6 +891,41 @@ reset();
 		check('development: reading archive is not denied', outDev?.permissionDecision !== 'deny');
 	}
 
+	// ---------------------------------------------------------------------------
+	// T9: Knowledge base injection in session-context
+	// ---------------------------------------------------------------------------
+	console.log('\nknowledge base injection - session-context');
+	{
+		reset({
+			withCampaign: true,
+			withApproval: true,
+			over: {approved: true, phase: 'execution'},
+		});
+
+		const KNOW_DIR = join(STATE, 'knowledge');
+		mkdirSync(KNOW_DIR, {recursive: true});
+		writeFileSync(
+			join(KNOW_DIR, 'pitfalls.md'),
+			'## [2026-09-21T00:00:00Z]\nAvoid global regex state leaks\n\n## [2026-09-21T01:00:00Z]\nAlways check return code\n',
+			'utf8',
+		);
+		writeFileSync(
+			join(KNOW_DIR, 'failed-approaches.md'),
+			'## [2026-09-21T00:30:00Z]\nTried full AST parser; too slow\n',
+			'utf8',
+		);
+
+		const r = run('session-context.mjs', {
+			...payload(),
+			hook_event_name: 'SessionStart',
+			source: 'startup',
+		});
+		const ctx = parse(r.stdout)?.hookSpecificOutput?.additionalContext ?? '';
+		check('session-context: knowledge section injected', ctx.includes('Knowledge base'));
+		check('session-context: pitfalls injected', ctx.includes('Avoid global regex state leaks'));
+		check('session-context: failed approaches injected', ctx.includes('Tried full AST parser'));
+	}
+
 // ---------------------------------------------------------------------------
 
 rmSync(WORK, {recursive: true, force: true});
