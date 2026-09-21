@@ -258,5 +258,67 @@ check('concurrent evidence chain has 12 entries and is valid', concurrentChain.v
 rmSync(testDir, {recursive: true, force: true});
 rmSync(concurrentDir, {recursive: true, force: true});
 
+// ---------------------------------------------------------------------------
+// T3: teamwork.mjs approve [--check | --manual-fallback]
+// ---------------------------------------------------------------------------
+console.log('\n=== T3: teamwork.mjs approve ===');
+const approveDir = mkdtempSync(join(tmpdir(), 'teamwork-approve-test-'));
+const approveTeamwork = join(approveDir, '.teamwork');
+mkdirSync(approveTeamwork, {recursive: true});
+
+const initialCharter = {
+  objective: 'Approve test objective',
+  integrity_mode: 'development',
+  pattern: 'self-verification',
+  working_directory: approveDir,
+  requirements: ['r1'],
+  out_of_scope: ['o1'],
+  verification_method: 'test',
+  acceptance_criteria: ['ac1'],
+  ownership_lease_minutes: 10,
+  approved: false,
+  phase: 'scoping',
+};
+writeFileSync(join(approveTeamwork, 'campaign.json'), JSON.stringify(initialCharter, null, 2), 'utf8');
+
+// 1. approve --check before approved -> exit 1
+const checkBefore = spawnSync(process.execPath, [CLI, 'approve', '--check'], {
+  cwd: approveDir,
+  encoding: 'utf8',
+});
+check('approve --check exits 1 when unapproved', checkBefore.status === 1);
+
+// 2. approve --manual-fallback -> exit 0, writes approval.json, updates campaign.json
+const manualRun = spawnSync(process.execPath, [CLI, 'approve', '--manual-fallback'], {
+  cwd: approveDir,
+  encoding: 'utf8',
+});
+check('approve --manual-fallback exits 0', manualRun.status === 0);
+check('approve --manual-fallback wrote approval.json', existsSync(join(approveTeamwork, 'approval.json')));
+
+const approvalData = JSON.parse(readFileSync(join(approveTeamwork, 'approval.json'), 'utf8'));
+check('approval.json has source=manual_fallback', approvalData.source === 'manual_fallback');
+
+const updatedCampaign = JSON.parse(readFileSync(join(approveTeamwork, 'campaign.json'), 'utf8'));
+check('campaign.json updated to approved=true and execution phase', updatedCampaign.approved === true && updatedCampaign.phase === 'execution');
+
+// 3. approve --check after approved -> exit 0
+const checkAfter = spawnSync(process.execPath, [CLI, 'approve', '--check'], {
+  cwd: approveDir,
+  encoding: 'utf8',
+});
+check('approve --check exits 0 after manual approval', checkAfter.status === 0);
+
+// 4. mutate campaign -> approve --check exits 1
+updatedCampaign.objective = 'Altered objective';
+writeFileSync(join(approveTeamwork, 'campaign.json'), JSON.stringify(updatedCampaign, null, 2), 'utf8');
+const checkTampered = spawnSync(process.execPath, [CLI, 'approve', '--check'], {
+  cwd: approveDir,
+  encoding: 'utf8',
+});
+check('approve --check exits 1 when charter altered', checkTampered.status === 1);
+
+rmSync(approveDir, {recursive: true, force: true});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

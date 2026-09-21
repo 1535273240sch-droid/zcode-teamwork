@@ -12,13 +12,14 @@ import {join, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {tmpdir} from 'node:os';
 
-import {lockKey, extractFilePath, readLeaseMinutes, isInsideDirectory} from '../plugins/teamwork/hooks/_lib.mjs';
+import {lockKey, extractFilePath, readLeaseMinutes, isInsideDirectory, charterHash} from '../plugins/teamwork/hooks/_lib.mjs';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..');
 const HOOKS = join(REPO, 'plugins', 'teamwork', 'hooks');
 const WORK = mkdtempSync(join(tmpdir(), 'teamwork-hooks-'));
 const STATE = join(WORK, '.teamwork');
 const CAMPAIGN = join(STATE, 'campaign.json');
+const APPROVAL = join(STATE, 'approval.json');
 const LEASE = join(STATE, 'ownership.json');
 const EVENTS = join(STATE, 'events.jsonl');
 const PLAN = join(STATE, 'plan.json');
@@ -107,11 +108,23 @@ function campaign(over = {}) {
 	};
 }
 
-function reset({withCampaign = true, over = {}} = {}) {
+function reset({withCampaign = true, withApproval = true, over = {}} = {}) {
 	rmSync(STATE, {recursive: true, force: true});
 	if (withCampaign) {
 		mkdirSync(STATE, {recursive: true});
-		writeFileSync(CAMPAIGN, JSON.stringify(campaign(over)));
+		const c = campaign(over);
+		writeFileSync(CAMPAIGN, JSON.stringify(c));
+		if (withApproval) {
+			writeFileSync(
+				APPROVAL,
+				JSON.stringify({
+					charter_sha256: charterHash(c),
+					approved_at: new Date().toISOString(),
+					base_sha: 'fake-head-sha',
+					source: 'user_prompt_hook',
+				}),
+			);
+		}
 	}
 }
 
@@ -667,11 +680,89 @@ reset();
 	const out4 = parse(r4.stdout)?.hookSpecificOutput;
 	check('bash-guard: redirect to evidence log is denied', out4?.permissionDecision === 'deny');
 
-	// 5. Bash redirect to .teamwork/approval.json is denied
-	const r5 = run('bash-guard.mjs', bashPayload('echo bad > .teamwork/approval.json'));
-	const out5 = parse(r5.stdout)?.hookSpecificOutput;
-	check('bash-guard: redirect to approval.json is denied', out5?.permissionDecision === 'deny');
-}
+		// 5. Bash redirect to .teamwork/approval.json is denied
+		const r5 = run('bash-guard.mjs', bashPayload('echo bad > .teamwork/approval.json'));
+		const out5 = parse(r5.stdout)?.hookSpecificOutput;
+		check('bash-guard: redirect to approval.json is denied', out5?.permissionDecision === 'deny');
+	}
+
+	// ---------------------------------------------------------------------------
+	// T3: Approval Gate & UserPromptSubmit
+	// ---------------------------------------------------------------------------
+	console.log('\napproval.mjs & isArmed - approval gate');
+	{
+		// 1. approved=true, phase=execution, but NO approval.json -> hooks inert
+		reset({withCampaign: true, withApproval: false, over: {approved: true, phase: 'execution'}});
+		const r1 = run('ownership-lock.mjs', payload());
+		check('no approval.json: ownership-lock exits 0', r1.code === 0);
+		check('no approval.json: ownership-lock is inert (no lease written)', !existsSync(LEASE));
+
+		// 2. approved=true, approval.json exists, but objective changed -> invalidates approval
+		reset({withCampaign: true, withApproval: true, over: {approved: true, phase: 'execution'}});
+		// Mutate campaign objective
+		const mutCampaign = JSON.parse(readFileSync(CAMPAIGN, 'utf8'));
+		mutCampaign.objective = 'Altered objective after approval';
+		writeFileSync(CAMPAIGN, JSON.stringify(mutCampaign));
+
+		const r2 = run('ownership-lock.mjs', payload());
+		check('charter modified: ownership-lock is inert', !existsSync(LEASE));
+		// Run a second time to verify event is only logged once
+		run('ownership-lock.mjs', payload());
+		const eventsText = existsSync(EVENTS) ? readFileSync(EVENTS, 'utf8') : '';
+		const invalidEvents = eventsText
+			.trim()
+			.split('\n')
+			.filter((line) => {
+				try {
+					return JSON.parse(line).event === 'approval_invalidated';
+				} catch {
+					return false;
+				}
+			});
+		check('charter modified: approval_invalidated logged exactly once', invalidEvents.length === 1, `count=${invalidEvents.length}`);
+
+		// 3. UserPromptSubmit with /teamwork-approve
+		reset({withCampaign: true, withApproval: false, over: {approved: false, phase: 'scoping'}});
+		const rApproveCmd = run('approval.mjs', {
+			hook_event_name: 'UserPromptSubmit',
+			cwd: WORK,
+			prompt: '/teamwork-approve',
+		});
+		check('approval.mjs: /teamwork-approve exits 0', rApproveCmd.code === 0);
+		check('approval.mjs: /teamwork-approve creates approval.json', existsSync(APPROVAL));
+		const app1 = JSON.parse(readFileSync(APPROVAL, 'utf8'));
+		check('approval.mjs: approval.json has correct source', app1.source === 'user_prompt_hook');
+		const camp1 = JSON.parse(readFileSync(CAMPAIGN, 'utf8'));
+		check('approval.mjs: campaign updated to approved=true and phase=execution', camp1.approved === true && camp1.phase === 'execution');
+
+		// 4. UserPromptSubmit with sentinel string in prompt
+		reset({withCampaign: true, withApproval: false, over: {approved: false, phase: 'scoping'}});
+		const rApproveSentinel = run('approval.mjs', {
+			hook_event_name: 'UserPromptSubmit',
+			cwd: WORK,
+			prompt: 'User clicked approve: [[TEAMWORK-APPROVE-v1]] please proceed',
+		});
+		check('approval.mjs: sentinel prompt exits 0', rApproveSentinel.code === 0);
+		check('approval.mjs: sentinel prompt creates approval.json', existsSync(APPROVAL));
+
+		// 5. Unrelated prompt does not approve
+		reset({withCampaign: true, withApproval: false, over: {approved: false, phase: 'scoping'}});
+		const rUnrelated = run('approval.mjs', {
+			hook_event_name: 'UserPromptSubmit',
+			cwd: WORK,
+			prompt: 'Hello how are you doing?',
+		});
+		check('approval.mjs: unrelated prompt does not create approval.json', !existsSync(APPROVAL));
+
+		// 6. Malformed stdin does not crash and writes nothing
+		reset({withCampaign: true, withApproval: false, over: {approved: false, phase: 'scoping'}});
+		const rBad = spawnSync(process.execPath, [join(HOOKS, 'approval.mjs')], {
+			input: 'not valid json',
+			encoding: 'utf8',
+		});
+		check('approval.mjs: malformed stdin exits 0', rBad.status === 0);
+		check('approval.mjs: malformed stdin writes no approval.json', !existsSync(APPROVAL));
+	}
 
 // ---------------------------------------------------------------------------
 

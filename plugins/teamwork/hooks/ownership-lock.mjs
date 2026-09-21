@@ -36,6 +36,7 @@ import {
 	statePaths,
 	loadCampaign,
 	isCampaignActive,
+	isArmed,
 	extractFilePath,
 	lockKey,
 	resolveOwner,
@@ -66,9 +67,6 @@ const paths = statePaths(cwd);
 
 if (!existsSync(paths.campaign)) process.exit(0);
 
-const campaign = loadCampaign(paths.campaign);
-if (!isCampaignActive(campaign)) process.exit(0);
-
 const filePath = extractFilePath(input);
 if (!filePath) process.exit(0); // nothing to own
 
@@ -89,6 +87,10 @@ if (isVerificationArtifact(filePath, cwd)) {
 		);
 	}
 }
+
+if (!isArmed(cwd)) process.exit(0);
+
+const campaign = loadCampaign(paths.campaign);
 
 const leaseMs = readLeaseMinutes(campaign) * 60_000;
 const {owner, source: ownerSource} = resolveOwner(input);

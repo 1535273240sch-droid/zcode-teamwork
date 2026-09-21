@@ -197,9 +197,9 @@ console.log('\n=== skills ===');
 
 console.log('\n=== commands ===');
 {
-	const commandsDir = join(PLUGIN, 'commands');
-	const files = readdirSync(commandsDir).filter((f) => f.endsWith('.md')).sort();
-	check('commands/: three commands present', files.join(',') === 'teamwork-end.md,teamwork-status.md,teamwork.md', files.join(','));
+		const commandsDir = join(PLUGIN, 'commands');
+		const files = readdirSync(commandsDir).filter((f) => f.endsWith('.md')).sort();
+		check('commands/: four commands present', files.join(',') === 'teamwork-approve.md,teamwork-end.md,teamwork-status.md,teamwork.md', files.join(','));
 	for (const file of files) {
 		const label = `commands/${file}`;
 		const fm = validate(label, join(commandsDir, file), COMMAND_KEYS, ['description']);

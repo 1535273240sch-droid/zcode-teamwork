@@ -204,6 +204,93 @@ export function isCampaignActive(campaign) {
 	return campaign?.approved === true && campaign?.phase === 'execution';
 }
 
+export const CHARTER_HASH_FIELDS = [
+	'objective',
+	'integrity_mode',
+	'pattern',
+	'working_directory',
+	'requirements',
+	'out_of_scope',
+	'verification_method',
+	'acceptance_criteria',
+	'ownership_lease_minutes',
+];
+
+export function sortKeysDeep(val) {
+	if (val === null || typeof val !== 'object') return val;
+	if (Array.isArray(val)) return val.map(sortKeysDeep);
+	const sorted = {};
+	for (const k of Object.keys(val).sort()) sorted[k] = sortKeysDeep(val[k]);
+	return sorted;
+}
+
+export function canonicalJson(val) {
+	return JSON.stringify(sortKeysDeep(val));
+}
+
+export function sha256Hex(content) {
+	return createHash('sha256').update(content, 'utf8').digest('hex');
+}
+
+export function charterHash(charter) {
+	if (!charter || typeof charter !== 'object') return '';
+	const obj = {};
+	for (const f of CHARTER_HASH_FIELDS) {
+		if (f in charter) obj[f] = charter[f];
+	}
+	return sha256Hex(canonicalJson(obj));
+}
+
+export function isArmed(cwd) {
+	const paths = statePaths(cwd);
+	const campaign = loadCampaign(paths.campaign);
+	if (!campaign) return false;
+	if (campaign.approved !== true || campaign.phase !== 'execution') return false;
+
+	let approval;
+	try {
+		if (existsSync(paths.approval)) {
+			approval = JSON.parse(readFileSync(paths.approval, 'utf8'));
+		}
+	} catch {
+		return false;
+	}
+	if (!approval || typeof approval !== 'object') return false;
+
+	const currentHash = charterHash(campaign);
+	if (approval.charter_sha256 !== currentHash) {
+		try {
+			let alreadyLogged = false;
+			if (existsSync(paths.events)) {
+				const lines = readFileSync(paths.events, 'utf8').trim().split('\n');
+				for (let i = lines.length - 1; i >= 0; i--) {
+					try {
+						const ev = JSON.parse(lines[i]);
+						if (
+							ev.event === 'approval_invalidated' &&
+							ev.approved_charter === approval.charter_sha256 &&
+							ev.current_charter === currentHash
+						) {
+							alreadyLogged = true;
+							break;
+						}
+					} catch {}
+				}
+			}
+			if (!alreadyLogged) {
+				appendEvent(paths, {
+					event: 'approval_invalidated',
+					approved_charter: approval.charter_sha256,
+					current_charter: currentHash,
+				});
+			}
+		} catch {}
+		return false;
+	}
+
+	return true;
+}
+
 export function writeAtomic(file, data) {
 	mkdirSync(dirname(file), {recursive: true});
 	const tmp = `${file}.${process.pid}.tmp`;

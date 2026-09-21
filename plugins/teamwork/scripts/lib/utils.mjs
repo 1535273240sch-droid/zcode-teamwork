@@ -6,51 +6,13 @@ import {join, dirname, resolve} from 'node:path';
 import {createHash} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 
-export const CHARTER_HASH_FIELDS = [
-  'objective',
-  'integrity_mode',
-  'pattern',
-  'working_directory',
-  'requirements',
-  'out_of_scope',
-  'verification_method',
-  'acceptance_criteria',
-  'ownership_lease_minutes',
-];
-
-export function sortKeysDeep(val) {
-  if (val === null || typeof val !== 'object') {
-    return val;
-  }
-  if (Array.isArray(val)) {
-    return val.map(sortKeysDeep);
-  }
-  const sorted = {};
-  const keys = Object.keys(val).sort();
-  for (const k of keys) {
-    sorted[k] = sortKeysDeep(val[k]);
-  }
-  return sorted;
-}
-
-export function canonicalJson(val) {
-  return JSON.stringify(sortKeysDeep(val));
-}
-
-export function sha256Hex(content) {
-  return createHash('sha256').update(content, 'utf8').digest('hex');
-}
-
-export function charterHash(charter) {
-  if (!charter || typeof charter !== 'object') return '';
-  const obj = {};
-  for (const f of CHARTER_HASH_FIELDS) {
-    if (f in charter) {
-      obj[f] = charter[f];
-    }
-  }
-  return sha256Hex(canonicalJson(obj));
-}
+export {
+  CHARTER_HASH_FIELDS,
+  sortKeysDeep,
+  canonicalJson,
+  sha256Hex,
+  charterHash,
+} from '../../hooks/_lib.mjs';
 
 export function findTeamworkDir(startDir = process.cwd()) {
   if (process.env.TEAMWORK_DIR) {

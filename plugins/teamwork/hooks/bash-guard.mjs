@@ -26,8 +26,9 @@ import {
 	allowWithContext,
 	statePaths,
 	loadCampaign,
-	isCampaignActive,
-	isInsideDirectory,
+		isCampaignActive,
+		isArmed,
+		isInsideDirectory,
 	lockKey,
 	resolveOwner,
 	readStore,
@@ -138,9 +139,6 @@ const paths = statePaths(cwd);
 
 if (!existsSync(paths.campaign)) process.exit(0);
 
-const campaign = loadCampaign(paths.campaign);
-if (!isCampaignActive(campaign)) process.exit(0);
-
 const command = input?.tool_input?.command;
 if (typeof command !== 'string' || command.length === 0) process.exit(0);
 
@@ -170,6 +168,10 @@ for (const {target} of candidates) {
 		}
 	}
 }
+
+if (!isArmed(cwd)) process.exit(0);
+
+const campaign = loadCampaign(paths.campaign);
 
 const leaseMs = readLeaseMinutes(campaign) * 60_000;
 const {owner, source: ownerSource} = resolveOwner(input);
