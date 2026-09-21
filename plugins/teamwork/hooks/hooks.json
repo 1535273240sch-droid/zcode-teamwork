@@ -1,5 +1,5 @@
 {
-  "description": "Teamwork - exclusive file ownership, Bash write guard, and campaign context",
+  "description": "Teamwork - exclusive file ownership, Bash write guard, campaign context, and the verification gate",
   "hooks": {
     "SessionStart": [
       {
@@ -37,6 +37,20 @@
             "args": ["${ZCODE_PLUGIN_ROOT}/hooks/bash-guard.mjs"],
             "timeoutMs": 5000,
             "statusMessage": "Checking shell writes against file ownership..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "process",
+            "command": "node",
+            "args": ["${ZCODE_PLUGIN_ROOT}/hooks/verification-gate.mjs"],
+            "timeoutMs": 5000,
+            "statusMessage": "Checking verification records..."
           }
         ]
       }

@@ -638,6 +638,131 @@ reset({over: {approved: false, phase: 'scoping'}});
 
 // ---------------------------------------------------------------------------
 
+console.log('\nverification-gate.mjs - Stop gate');
+// The gate fires only when the state file claims completed work with no evidence.
+// A campaign that never blocks is worse than useless: it trains the model to ignore
+// the Stop hook entirely.
+function plan(milestones, over = {}) {
+	writeFileSync(PLAN, JSON.stringify({milestones, ...over}));
+}
+
+function verifyRecord(id, body) {
+	mkdirSync(join(STATE, 'verifications'), {recursive: true});
+	writeFileSync(join(STATE, 'verifications', `${id}.md`), body);
+}
+
+// Stopping is free when nothing is claimed done.
+reset();
+plan([{id: 'm1', status: 'in_progress'}]);
+{
+	const r = run('verification-gate.mjs', {...payload(), hook_event_name: 'Stop'});
+	check('gate: silent with no completed milestone', r.stdout === '{}', r.stdout.slice(0, 200));
+}
+
+// The core rule: a milestone marked done with no record is a contradiction.
+reset();
+plan([{id: 'm1', status: 'done'}]);
+{
+	const r = run('verification-gate.mjs', {...payload(), hook_event_name: 'Stop'});
+	const out = parse(r.stdout) ?? {};
+	check('gate: blocks a done milestone with no record', out.decision === 'block', r.stdout.slice(0, 240));
+	check('gate: names the offending milestone', String(out.stopReason ?? '').includes('m1'), out.stopReason);
+}
+
+// A record that exists but never names the milestone cannot be used as evidence.
+reset();
+plan([{id: 'm1', status: 'done'}]);
+verifyRecord('m1', 'Verdict: SOUND\n');
+{
+	const r = run('verification-gate.mjs', {...payload(), hook_event_name: 'Stop'});
+	const out = parse(r.stdout) ?? {};
+	check('gate: blocks a record that never names the milestone', out.decision === 'block', r.stdout.slice(0, 240));
+}
+
+// A record that names the milestone but carries no verdict is not a verification.
+reset();
+plan([{id: 'm1', status: 'done'}]);
+verifyRecord('m1', 'm1 was looked at, seems fine\n');
+{
+	const r = run('verification-gate.mjs', {...payload(), hook_event_name: 'Stop'});
+	const out = parse(r.stdout) ?? {};
+	check('gate: blocks a record with no verdict token', out.decision === 'block', r.stdout.slice(0, 240));
+}
+
+// A real record clears the gate.
+reset();
+plan([{id: 'm1', status: 'done'}]);
+verifyRecord('m1', 'Milestone m1\nVerifier: Auditor\nVerdict: REPRODUCED\n');
+{
+	const r = run('verification-gate.mjs', {...payload(), hook_event_name: 'Stop'});
+	check('gate: clears once the record is complete', r.stdout === '{}', r.stdout.slice(0, 200));
+}
+
+// verified: true is the other way the state file claims completion.
+reset();
+plan([{id: 'm1', status: 'pending', verified: true}]);
+{
+	const r = run('verification-gate.mjs', {...payload(), hook_event_name: 'Stop'});
+	const out = parse(r.stdout) ?? {};
+	check('gate: verified flag also counts as claimed done', out.decision === 'block', r.stdout.slice(0, 240));
+}
+
+// Alternative record filenames the roster actually writes.
+reset();
+plan([{id: 'm1', status: 'done'}]);
+mkdirSync(join(STATE, 'verifications'), {recursive: true});
+writeFileSync(join(STATE, 'verifications', 'milestone-m1-verification.md'), 'm1\nVerdict: SOUND\n');
+{
+	const r = run('verification-gate.mjs', {...payload(), hook_event_name: 'Stop'});
+	check('gate: accepts the usual record filename shapes', r.stdout === '{}', r.stdout.slice(0, 200));
+}
+
+// A campaign that declares itself complete owes a final audit.
+reset();
+plan([{id: 'm1', status: 'done'}], {status: 'complete'});
+verifyRecord('m1', 'm1\nVerdict: SOUND\n');
+{
+	const r = run('verification-gate.mjs', {...payload(), hook_event_name: 'Stop'});
+	const out = parse(r.stdout) ?? {};
+	check('gate: blocks a complete campaign missing its final audit', out.decision === 'block', r.stdout.slice(0, 240));
+	writeFileSync(join(STATE, 'final-audit.md'), '# final audit\n');
+	const r2 = run('verification-gate.mjs', {...payload(), hook_event_name: 'Stop'});
+	check('gate: clears once the final audit exists', r2.stdout === '{}', r2.stdout.slice(0, 200));
+}
+
+// Second pass in the same turn must not block, or the model can never finish.
+reset();
+plan([{id: 'm1', status: 'done'}]);
+{
+	const r = run('verification-gate.mjs', {...payload(), hook_event_name: 'Stop', stop_hook_active: true});
+	check('gate: stands down on the second pass', r.stdout === '{}', r.stdout.slice(0, 200));
+}
+
+// An unapproved campaign is still scoping; the gate has no business there.
+reset({over: {approved: false, phase: 'scoping'}});
+plan([{id: 'm1', status: 'done'}]);
+{
+	const r = run('verification-gate.mjs', {...payload(), hook_event_name: 'Stop'});
+	check('gate: inert outside an approved campaign', r.stdout === '{}', r.stdout.slice(0, 200));
+}
+
+// Explicit opt-out for teams that do not want a hard gate.
+reset({over: {verificationGate: false}});
+plan([{id: 'm1', status: 'done'}]);
+{
+	const r = run('verification-gate.mjs', {...payload(), hook_event_name: 'Stop'});
+	check('gate: honoured when campaign turns it off', r.stdout === '{}', r.stdout.slice(0, 200));
+}
+
+// With no plan on disk there is nothing to check, and blocking would be a false positive.
+reset();
+{
+	const r = run('verification-gate.mjs', {...payload(), hook_event_name: 'Stop'});
+	check('gate: tolerant of a missing plan', r.stdout === '{}', r.stdout.slice(0, 200));
+}
+
+// ---------------------------------------------------------------------------
+
 rmSync(WORK, {recursive: true, force: true});
 
 console.log(`\n${pass} passed, ${fail} failed`);
