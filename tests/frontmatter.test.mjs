@@ -46,16 +46,16 @@ const ZCODE_TOOLS = new Set([
 	'Task',
 ]);
 
-const AGENTS = [
-	'sentinel',
-	'orchestrator',
-	'explorer',
-	'worker',
-	'critic',
-	'challenger',
-	'auditor',
-	'success-auditor',
-];
+// The roster is discovered from the directory rather than listed here. A hardcoded
+// list would silently skip any agent file added later, and the checks below are the
+// ones that keep a new role from inheriting dispatch capability.
+const AGENTS = readdirSync(join(PLUGIN, 'agents'))
+	.filter((f) => f.endsWith('.md'))
+	.map((f) => f.slice(0, -3))
+	.sort();
+
+// The roles that judge work must not be able to change it.
+const VERIFIER_ROLES = ['critic', 'challenger', 'auditor', 'success-auditor'];
 
 // The plugin's core invariant is enforced by these two hooks sharing one store.
 const REQUIRED_PRETOOLUSE_MATCHERS = ['Write|Edit', 'Bash'];
@@ -178,6 +178,44 @@ for (const name of AGENTS) {
 		/[A-Za-z]{4,}/.test(fm.description ?? ''),
 		String(fm.description).slice(0, 80),
 	);
+
+	// Every role must declare an explicit tool list. ZCode only applies a profile's
+	// tool restrictions when `tools` is present; an agent that omits it inherits the
+	// parent's full set, which would silently hand it dispatch capability and break
+	// both the spawn budget and exclusive file ownership.
+	check(
+		`agents/${name}.md: declares an explicit tool list`,
+		typeof fm.tools === 'string' && fm.tools.trim().length > 0,
+		`tools=${JSON.stringify(fm.tools)}`,
+	);
+
+	// Task starts a Subagent. A nested dispatcher is invisible to the hooks that
+	// enforce the campaign's budget and ownership: a parent hook cannot see a
+	// grandchild's tool calls, so the ceiling and the file table would both be
+	// defeated without any error being raised.
+	const declaredTools = String(fm.tools ?? '')
+		.split(',')
+		.map((t) => t.trim())
+		.filter((t) => t.length > 0);
+	check(
+		`agents/${name}.md: cannot dispatch a nested subagent`,
+		!declaredTools.includes('Task'),
+		`tools=${declaredTools.join(', ')}`,
+	);
+
+	// The verifier roles must not be able to edit: a verifier that changes the code
+	// makes the evidence describe a revision that no longer exists. Enforced in
+	// isolation.mjs at runtime, and asserted here so the frontmatter cannot drift.
+	if (VERIFIER_ROLES.includes(name)) {
+		const disallowed = String(fm.disallowedTools ?? '')
+			.split(',')
+			.map((t) => t.trim());
+		check(
+			`agents/${name}.md: a verifier cannot edit`,
+			disallowed.includes('Edit') && disallowed.includes('Write'),
+			`disallowedTools=${JSON.stringify(fm.disallowedTools)}`,
+		);
+	}
 }
 
 console.log('\n=== skills ===');
