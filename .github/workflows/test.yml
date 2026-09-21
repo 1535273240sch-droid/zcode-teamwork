@@ -19,8 +19,34 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
+
       # The plugin uses Node built-ins only, so there is deliberately no install step.
-      - name: Structural validation
-        run: node tests/frontmatter.test.mjs
-      - name: Hook behaviour
-        run: node tests/hooks.test.mjs
+
+      # Run the whole suite through npm test, not file by file.
+      #
+      # The previous version listed two files explicitly. Adding three more suites
+      # later meant they never ran on CI at all - so a POSIX-only path assertion sat
+      # in tests/patterns.test.mjs while this workflow reported green on Windows.
+      # A single entry point cannot drift out of sync with the test directory.
+      - name: Test suite
+        run: npm test
+
+      # Belt and braces: if a suite exists on disk but is not wired into npm test,
+      # fail rather than quietly under-report. This is the check that would have
+      # caught the drift described above.
+      - name: Assert every test file is wired into npm test
+        shell: bash
+        run: |
+          missing=0
+          for f in tests/*.test.mjs; do
+            name=$(basename "$f")
+            if ! grep -q "$name" package.json; then
+              echo "::error file=$f::tests/$name exists but is not referenced by npm test"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "One or more test files are not run by CI. Add them to the test script."
+            exit 1
+          fi
+          echo "All test files are wired into npm test."

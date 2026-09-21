@@ -8,10 +8,10 @@
 //   node tests/patterns.test.mjs
 
 import {mkdirSync, writeFileSync, rmSync, mkdtempSync, existsSync, readdirSync} from 'node:fs';
-import {join, dirname} from 'node:path';
+import {join, dirname, resolve, isAbsolute} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {tmpdir} from 'node:os';
-import {spawnSync} from 'node:child_process';
+import {spawnSync, execFileSync} from 'node:child_process';
 
 import {
 	PATTERN_IDS,
@@ -229,7 +229,64 @@ console.log('\nisolation.mjs - worker isolation');
 
 {
 	check('isolation: a bare temp dir is not a repo', isGitRepo(WORK) === false);
-	check('isolation: a repository without commits cannot make a worktree', supportsWorktree(REPO) === false, 'the shipped repo has no commits in this checkout');
+
+	// Build the case rather than pointing at the clone. The previous version asserted
+	// on REPO, which is the checkout and therefore has commits - so it tested nothing
+	// and failed on any machine where the clone was complete.
+	const bare = freshDir('iso-nocommit');
+	let gitAvailable = true;
+	try {
+		execFileSync('git', ['init'], {cwd: bare, stdio: 'ignore'});
+	} catch {
+		gitAvailable = false;
+	}
+
+	if (gitAvailable) {
+		check('isolation: a freshly initialised repo is a repo', isGitRepo(bare) === true, bare);
+		check(
+			'isolation: a repository without commits cannot make a worktree',
+			supportsWorktree(bare) === false,
+			`supportsWorktree(${bare}) returned true, but a repo with no HEAD has nothing to branch from`,
+		);
+
+		// Build the positive case too, rather than pointing at the checkout: the
+		// workspace may have been extracted from an archive and hold no .git at all,
+		// which would make this assertion environment-dependent rather than a test of
+		// the behaviour.
+		const withCommit = freshDir('iso-withcommit');
+		let committed = false;
+		try {
+			execFileSync('git', ['init'], {cwd: withCommit, stdio: 'ignore'});
+			writeFileSync(join(withCommit, 'a.txt'), 'x\n');
+			execFileSync('git', ['add', '.'], {cwd: withCommit, stdio: 'ignore'});
+			execFileSync(
+				'git',
+				[
+					'-c',
+					'user.email=test@example.invalid',
+					'-c',
+					'user.name=test',
+					'commit',
+					'-m',
+					'first',
+				],
+				{cwd: withCommit, stdio: 'ignore'},
+			);
+			committed = true;
+		} catch {
+			committed = false;
+		}
+
+		if (committed) {
+			check('isolation: a repository with a commit can make a worktree', supportsWorktree(withCommit) === true, `supportsWorktree(${withCommit})`);
+		} else {
+			check('isolation: SKIPPED, could not create a commit in this environment', false, 'git commit failed');
+		}
+	} else {
+		// Visible skip rather than a silent pass: this branch means the environment
+		// lacks git, not that the behaviour was verified.
+		check('isolation: SKIPPED, git is unavailable in this environment', false, 'git not found on PATH');
+	}
 }
 
 {
@@ -245,10 +302,13 @@ console.log('\nisolation.mjs - worker isolation');
 }
 
 {
+	// Expected values are built with the same path module the implementation uses.
+	// Hardcoding '/state/...' asserts a POSIX layout, which passes on Linux and
+	// macOS and fails on Windows, where join() correctly produces backslashes.
 	const paths = isolationPaths('/state', 'ws1');
-	check('isolation: paths are nested under the state dir', paths.base === '/state/worktrees/ws1', paths.base);
-	check('isolation: the scratch directory is inside the base', paths.scratch === '/state/worktrees/ws1/scratch', paths.scratch);
-	check('isolation: the worktree has its own suffix', paths.worktree === '/state/worktrees/ws1-wt', paths.worktree);
+	check('isolation: paths are nested under the state dir', paths.base === join('/state', 'worktrees', 'ws1'), paths.base);
+	check('isolation: the scratch directory is inside the base', paths.scratch === join('/state', 'worktrees', 'ws1', 'scratch'), paths.scratch);
+	check('isolation: the worktree has its own suffix', paths.worktree === join('/state', 'worktrees', 'ws1-wt'), paths.worktree);
 }
 
 {
@@ -331,7 +391,10 @@ console.log('\nisolation.mjs - worker isolation');
 
 {
 	check('isolation: an absolute state dir is passed through', absoluteStateDir('/abs', '/cwd') === '/abs');
-	check('isolation: a relative state dir is resolved', absoluteStateDir('rel', '/cwd') === '/cwd/rel', absoluteStateDir('rel', '/cwd'));
+	// resolve() is what the implementation calls, so the expectation is built the same
+	// way; a literal '/cwd/rel' would only hold on POSIX.
+	check('isolation: a relative state dir is resolved', absoluteStateDir('rel', '/cwd') === resolve('/cwd', 'rel'), absoluteStateDir('rel', '/cwd'));
+	check('isolation: the resolved result is absolute', isAbsolute(absoluteStateDir('rel', WORK)), absoluteStateDir('rel', WORK));
 }
 
 // ---------------------------------------------------------------------------
