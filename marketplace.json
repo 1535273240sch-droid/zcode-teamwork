@@ -10,6 +10,14 @@
       "version": "0.2.0",
       "category": "Developer Tools",
       "tags": ["multi-agent", "orchestration", "long-horizon", "verification", "research"]
+    },
+    {
+      "name": "hook-probe",
+      "source": "./hook-probe",
+      "description": "Developer tool: records every hook event ZCode delivers to a third-party plugin and exercises the return-value channels (block, deny, updatedInput, additionalContext). Install only when debugging hook behaviour.",
+      "version": "0.1.0",
+      "category": "Developer Tools",
+      "tags": ["hook", "debug", "developer-tool"]
     }
   ]
 }

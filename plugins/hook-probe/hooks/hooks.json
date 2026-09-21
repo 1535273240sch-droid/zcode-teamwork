@@ -1,0 +1,103 @@
+{
+  "description": "hook-probe - records all seven hook events and exercises the return channels",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "process",
+            "command": "node",
+            "args": ["${ZCODE_PLUGIN_ROOT}/hooks/probe.mjs"],
+            "timeoutMs": 5000,
+            "statusMessage": "hook-probe: SessionStart"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "process",
+            "command": "node",
+            "args": ["${ZCODE_PLUGIN_ROOT}/hooks/probe.mjs"],
+            "timeoutMs": 5000,
+            "statusMessage": "hook-probe: UserPromptSubmit"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "process",
+            "command": "node",
+            "args": ["${ZCODE_PLUGIN_ROOT}/hooks/probe.mjs"],
+            "timeoutMs": 5000,
+            "statusMessage": "hook-probe: PreToolUse"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "process",
+            "command": "node",
+            "args": ["${ZCODE_PLUGIN_ROOT}/hooks/probe.mjs"],
+            "timeoutMs": 5000,
+            "statusMessage": "hook-probe: PermissionRequest"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "process",
+            "command": "node",
+            "args": ["${ZCODE_PLUGIN_ROOT}/hooks/probe.mjs"],
+            "timeoutMs": 5000,
+            "statusMessage": "hook-probe: PostToolUse"
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "process",
+            "command": "node",
+            "args": ["${ZCODE_PLUGIN_ROOT}/hooks/probe.mjs"],
+            "timeoutMs": 5000,
+            "statusMessage": "hook-probe: PostToolUseFailure"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "process",
+            "command": "node",
+            "args": ["${ZCODE_PLUGIN_ROOT}/hooks/probe.mjs"],
+            "timeoutMs": 5000,
+            "statusMessage": "hook-probe: Stop"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "hook-probe",
+  "version": "0.1.0",
+  "description": "Developer tool: records every hook event ZCode delivers to a third-party plugin, and exercises the hook return-value channels (block, deny, updatedInput, additionalContext). Install only when debugging hook behaviour; normal Teamwork use does not need it.",
+  "author": {
+    "name": "Teamwork for ZCode"
+  },
+  "license": "MIT",
+  "keywords": ["hook", "debug", "developer-tool", "zcode"]
+}

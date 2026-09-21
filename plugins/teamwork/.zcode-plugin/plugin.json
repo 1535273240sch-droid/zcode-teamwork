@@ -5,8 +5,8 @@
   "author": {
     "name": "Teamwork for ZCode"
   },
-  "homepage": "https://github.com/1535273240sch-droid/teamwork-",
-  "repository": "https://github.com/1535273240sch-droid/teamwork-",
+  "homepage": "https://github.com/1535273240sch-droid/zcode-teamwork",
+  "repository": "https://github.com/1535273240sch-droid/zcode-teamwork",
   "license": "MIT",
   "keywords": ["multi-agent", "orchestration", "long-horizon", "verification", "file-ownership"],
   "commands": "commands",
