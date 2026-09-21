@@ -231,9 +231,27 @@ export class TeamworkEngine {
 		for (const raw of milestones) {
 			state = addMilestoneToState(state, createMilestone(raw));
 		}
+
+		// Re-planning invalidates any prior approval.
+		//
+		// The approval gate is the one decision the two-phase flow exists to protect:
+		// the human reads a charter and agrees to the work. Replacing the milestone
+		// list afterwards while keeping approved: true means the campaign runs a plan
+		// nobody agreed to - approval survives a change it was never granted for.
+		// Measured: after init -> plan -> approve, a second plan took effect with
+		// approved still true.
+		//
+		// setPhase refuses to move backwards, which is right for a stale hook and wrong
+		// here, so the reset is done directly. A campaign in this state must be approved
+		// again before anything executes.
+		const wasApproved = state.approved === true;
+		if (wasApproved) {
+			state = {...state, phase: 'charter', approved: false};
+		}
+
 		const saved = this.save(state);
-		this.log('plan-created', {milestones: saved.milestones.length});
-		return {ok: true, state: saved};
+		this.log('plan-created', {milestones: saved.milestones.length, approvalReset: wasApproved});
+		return {ok: true, state: saved, approvalReset: wasApproved};
 	}
 
 	/** Batches, dispatch count, and the two failure modes the scheduler exists to catch. */

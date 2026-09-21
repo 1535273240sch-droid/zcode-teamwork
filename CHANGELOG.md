@@ -6,6 +6,32 @@ The version lives in **two** places and they must stay in sync: `plugins/teamwor
 is the installed version, and `marketplace.json` is the version the client compares against to decide whether
 to offer an update. Bump both, or installed users will never be told there is a new one.
 
+## [0.3.4] — 2026-09-22
+
+### Fixed
+
+- **Re-planning after approval silently invalidated the approval gate.** The approval
+  gate is the one decision the two-phase flow exists to protect: a human reads a plan
+  and agrees to it. Replacing the milestone list afterwards kept `approved: true`, so
+  the campaign ran a plan nobody had agreed to. Found by driving the CLI: after
+  `init` -> `plan` -> `approve`, a second `plan` took effect with `approved` still
+  true. Any campaign whose requirements changed - which is every real project - was
+  running unapproved work. Re-planning now resets to `charter` with `approved: false`,
+  and the approval must be given again.
+
+### Changed
+
+- README rewritten. The old opening led with "multi-agent orchestration", a term that
+  describes a crowded field and says nothing about this project. The new opening
+  leads with what it actually is - hooks as physical constraints rather than
+  persuasion - and then makes the evidence the selling point: nine defects found on a
+  real machine while 808 unit tests were green, all of them silent, all now fixed.
+  The "when to use this" section, previously added near the top, now states the
+  platform's limits beside it rather than leaving them to be discovered.
+
+### Tests
+
+808.
 ## [0.3.3] — 2026-09-22
 
 One defect, found while preparing a first-task walkthrough and testing the CLI path
