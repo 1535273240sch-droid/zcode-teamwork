@@ -28,15 +28,7 @@
 
 import {readFileSync, existsSync} from 'node:fs';
 
-import {
-	readStdin,
-	deny,
-	allowWithContext,
-	statePaths,
-	loadCampaign,
-	isCampaignActive,
-	DEFAULT_SPAWN_BUDGET,
-} from './_lib.mjs';
+import {readStdin, deny, allowWithContext, statePaths, loadCampaign, isCampaignActive, DEFAULT_SPAWN_BUDGET, resolveProjectDir} from './_lib.mjs';
 
 // Warn once the run is close enough to the ceiling that the orchestrator should
 // start planning its last milestones rather than discovering the wall.
@@ -101,7 +93,7 @@ if (process.env.TEAMWORK_SPAWN_BUDGET === 'off') emit({});
 const toolName = pick(input, 'toolName', 'tool_name');
 if (toolName !== 'Task') emit({});
 
-const cwd = pick(input, 'cwd', 'cwd') || process.cwd();
+const cwd = resolveProjectDir(input);
 const paths = statePaths(cwd);
 
 if (!existsSync(paths.campaign)) emit({});

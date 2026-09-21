@@ -20,26 +20,7 @@
 //
 // ASCII only: this file is a protocol artifact and crosses an encoding boundary.
 
-import {
-	readStdin,
-	deny,
-	allowWithContext,
-	statePaths,
-	loadCampaign,
-	isCampaignActive,
-	isInsideDirectory,
-	lockKey,
-	resolveOwner,
-	readStore,
-	appendEvent,
-	acquireMutex,
-	releaseMutex,
-	writeAtomic,
-	pruneStaleTmp,
-	pruneExpired,
-	readLeaseMinutes,
-	existsSync,
-} from './_lib.mjs';
+import {readStdin, deny, allowWithContext, statePaths, loadCampaign, isCampaignActive, isInsideDirectory, lockKey, resolveOwner, readStore, appendEvent, acquireMutex, releaseMutex, writeAtomic, pruneStaleTmp, pruneExpired, readLeaseMinutes, existsSync, resolveProjectDir} from './_lib.mjs';
 
 // Patterns whose target file we can name with reasonable confidence.
 const TARGET_PATTERNS = [
@@ -131,7 +112,7 @@ try {
 	process.exit(0); // malformed payload: never block a tool call over it
 }
 
-const cwd = input.cwd || process.cwd();
+const cwd = resolveProjectDir(input);
 const paths = statePaths(cwd);
 
 if (!existsSync(paths.campaign)) process.exit(0);

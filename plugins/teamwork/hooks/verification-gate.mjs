@@ -23,15 +23,7 @@
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import {
-	emit,
-	readStdin,
-	statePaths,
-	loadCampaign,
-	isCampaignActive,
-	VERIFICATIONS_DIR,
-	FINAL_AUDIT_NAME,
-} from './_lib.mjs';
+import {emit, readStdin, statePaths, loadCampaign, isCampaignActive, VERIFICATIONS_DIR, FINAL_AUDIT_NAME, resolveProjectDir} from './_lib.mjs';
 
 // Verdict words the roster is allowed to end a record with. Kept in sync with the
 // verdict table in skills/teamwork-execute/SKILL.md.
@@ -108,7 +100,7 @@ if (pick(input, 'stopHookActive', 'stop_hook_active') === true) emit({});
 
 if (process.env.TEAMWORK_VERIFY_GATE === 'off') emit({});
 
-const cwd = pick(input, 'cwd', 'cwd') || process.cwd();
+const cwd = resolveProjectDir(input);
 const paths = statePaths(cwd);
 
 const campaign = loadCampaign(paths.campaign);

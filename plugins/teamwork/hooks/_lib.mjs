@@ -29,6 +29,25 @@ export const LOCK_REL = join(STATE_DIR, 'ownership.json');
 export const PLAN_REL = join(STATE_DIR, 'plan.json');
 export const EVENTS_NAME = 'events.jsonl';
 export const MUTEX_NAME = '.lock';
+// Resolve the project directory a hook should work against.
+//
+// Input.cwd is the documented field, but it is not always present in the payload a
+// third-party plugin receives, and the process working directory of a hook process is
+// not guaranteed to be the workspace root. ZCode exports the project directory as an
+// environment variable specifically so a hook can find it regardless, so that is
+// checked first. Getting this wrong is silent: every hook looks for .teamwork/ under
+// the wrong directory, finds nothing, and reports nothing.
+export function resolveProjectDir(input) {
+	const fromEnv =
+		process.env.ZCODE_PROJECT_DIR ||
+		process.env.CLAUDE_PROJECT_DIR ||
+		"";
+	if (fromEnv.length > 0) return fromEnv;
+	const fromInput = input?.cwd ?? input?.cwd;
+	if (typeof fromInput === "string" && fromInput.length > 0) return fromInput;
+	return process.cwd();
+}
+
 export const VERIFICATIONS_DIR = 'verifications';
 export const FINAL_AUDIT_NAME = 'final-audit.md';
 

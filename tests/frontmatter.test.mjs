@@ -338,5 +338,36 @@ console.log('\n=== protocol files are pure ASCII ===');
 	}
 }
 
+// --- hook cwd contract -----------------------------------------------------
+//
+// Every hook must resolve its project directory through the shared helper. A hook
+// that reads input.cwd directly breaks whenever the payload omits that field, and
+// the failure is silent: it looks for .teamwork/ under the wrong directory, finds
+// nothing, and reports nothing. ZCode exports ZCODE_PROJECT_DIR for exactly this
+// reason, so resolveProjectDir() is the only accepted form.
+
+console.log('\n=== hook cwd contract ===');
+
+{
+	const hooksDir = join(PLUGIN, 'hooks');
+	const hookFiles = readdirSync(hooksDir).filter((f) => f.endsWith('.mjs') && f !== '_lib.mjs');
+	check('hooks: there are hooks to check', hookFiles.length >= 7, hookFiles.join(', '));
+
+	for (const file of hookFiles) {
+		const source = readFileSync(join(hooksDir, file), 'utf8');
+		if (!source.includes('const cwd')) continue;
+		check(
+			`hooks/${file}: uses the shared project-dir helper`,
+			source.includes('resolveProjectDir(input)'),
+			'resolves cwd some other way',
+		);
+	}
+
+	const lib = readFileSync(join(hooksDir, '_lib.mjs'), 'utf8');
+	check('hooks/_lib.mjs: helper is exported', /export function resolveProjectDir/.test(lib));
+	check('hooks/_lib.mjs: helper consults ZCODE_PROJECT_DIR', /ZCODE_PROJECT_DIR/.test(lib));
+	check('hooks/_lib.mjs: helper consults CLAUDE_PROJECT_DIR', /CLAUDE_PROJECT_DIR/.test(lib));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

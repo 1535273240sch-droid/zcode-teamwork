@@ -17,13 +17,7 @@
 import {readFileSync, existsSync, readdirSync} from 'node:fs';
 import {join} from 'node:path';
 
-import {
-	readStdin,
-	statePaths,
-	loadCampaign,
-	VERIFICATIONS_DIR,
-	FINAL_AUDIT_NAME,
-} from './_lib.mjs';
+import {readStdin, statePaths, loadCampaign, VERIFICATIONS_DIR, FINAL_AUDIT_NAME, resolveProjectDir} from './_lib.mjs';
 
 function emit(obj) {
 	process.stdout.write(JSON.stringify(obj));
@@ -56,7 +50,7 @@ try {
 	process.exit(0);
 }
 
-const cwd = input.cwd || process.cwd();
+const cwd = resolveProjectDir(input);
 const paths = statePaths(cwd);
 
 if (!existsSync(paths.campaign)) process.exit(0);

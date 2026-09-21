@@ -26,7 +26,7 @@
 import {readFileSync, existsSync, statSync, readdirSync} from 'node:fs';
 import {join} from 'node:path';
 
-import {readStdin, statePaths, loadCampaign, isCampaignActive, VERIFICATIONS_DIR} from './_lib.mjs';
+import {readStdin, statePaths, loadCampaign, isCampaignActive, VERIFICATIONS_DIR, resolveProjectDir} from './_lib.mjs';
 
 // Silence that is worth mentioning. Deliberately generous: a Worker running a long
 // build or a full test suite is not stalled, and crying wolf on every quiet minute
@@ -61,7 +61,7 @@ try {
 
 if (process.env.TEAMWORK_PROGRESS_WATCH === 'off') emit({});
 
-const cwd = pick(input, 'cwd', 'cwd') || process.cwd();
+const cwd = resolveProjectDir(input);
 const paths = statePaths(cwd);
 
 if (!existsSync(paths.campaign)) emit({});

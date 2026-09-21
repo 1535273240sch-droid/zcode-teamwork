@@ -20,7 +20,7 @@
 //
 // ASCII only: this file is a protocol artifact and crosses an encoding boundary.
 
-import {readStdin, statePaths, loadCampaign, appendEvent, existsSync} from './_lib.mjs';
+import {readStdin, statePaths, loadCampaign, appendEvent, existsSync, resolveProjectDir} from './_lib.mjs';
 
 // Tools whose target file is worth naming in the trail. Everything else is
 // recorded by name alone.
@@ -54,7 +54,7 @@ try {
 	emit({}); // malformed payload: never interfere
 }
 
-const cwd = pick(input, 'cwd', 'cwd') || process.cwd();
+const cwd = resolveProjectDir(input);
 const paths = statePaths(cwd);
 
 // Outside a campaign every project would accumulate a trail nobody reads, and
