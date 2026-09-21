@@ -369,5 +369,25 @@ console.log('\n=== hook cwd contract ===');
 	check('hooks/_lib.mjs: helper consults CLAUDE_PROJECT_DIR', /CLAUDE_PROJECT_DIR/.test(lib));
 }
 
+// --- Stop hook channel -----------------------------------------------------
+//
+// A Stop hook that returns only `stopReason` is a silent no-op: ZCode records the
+// reason, sets blockRequested, and then ends the turn, because the continuation
+// check requires additionalContexts to be non-empty and only reason/systemMessage
+// are pushed into it. This shipped once and made the whole verification gate inert
+// on a real machine, so it is asserted structurally now.
+
+console.log('\n=== Stop hook channel ===');
+
+{
+	const gate = readFileSync(join(PLUGIN, 'hooks', 'verification-gate.mjs'), 'utf8');
+	check('gate: returns reason on block', /decision:\s*'block',\s*\n\s*reason:/.test(gate), 'block must carry reason');
+	check('gate: does not send the display-only stopReason', !/stopReason:/.test(gate), 'stopReason does not reach additionalContexts');
+
+	const probe = readFileSync(join(REPO, 'plugins', 'hook-probe', 'hooks', 'probe.mjs'), 'utf8');
+	check('probe: block mode returns reason', /reason:\s*'hook-probe: verifying/.test(probe), 'probe must exercise the working channel');
+	check('probe: does not send stopReason', !/stopReason:/.test(probe), 'a probe testing the wrong field reports a false negative');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

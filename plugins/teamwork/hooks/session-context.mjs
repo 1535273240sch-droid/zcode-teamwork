@@ -17,7 +17,7 @@
 import {readFileSync, existsSync, readdirSync} from 'node:fs';
 import {join} from 'node:path';
 
-import {readStdin, statePaths, loadCampaign, VERIFICATIONS_DIR, FINAL_AUDIT_NAME, resolveProjectDir} from './_lib.mjs';
+import {readStdin, statePaths, loadCampaign, loadMilestones, VERIFICATIONS_DIR, FINAL_AUDIT_NAME, resolveProjectDir} from './_lib.mjs';
 
 function emit(obj) {
 	process.stdout.write(JSON.stringify(obj));
@@ -104,7 +104,13 @@ lines.push(existsSync(join(paths.stateDir, FINAL_AUDIT_NAME)) ? `Final audit on 
 // The plan is the part of the orchestration that used to live only in the
 // conversation and therefore vanished whenever the session did.
 lines.push('');
-const plan = existsSync(paths.plan) ? readJson(paths.plan) : undefined;
+// campaign.json is authoritative; plan.json is the legacy fallback, so a campaign
+// created through the CLI still reports its milestones here.
+const {milestones, source} = loadMilestones(cwd);
+const legacy = loadCampaign(paths.plan);
+const plan = source === null
+	? undefined
+	: {milestones, sentinel: legacy?.sentinel, ownership: loadCampaign(paths.campaign)?.ownership ?? legacy?.ownership};
 if (!plan) {
 	lines.push(
 		'Plan: .teamwork/plan.json does not exist yet. If the Sentinel has already cleared the charter, ' +
@@ -112,9 +118,8 @@ if (!plan) {
 			'the only thing that keeps parallel Workers off each other, and it does not survive in conversation.',
 	);
 } else {
-	lines.push('Plan (from .teamwork/plan.json - this is the authority, not your memory of it):');
+	lines.push(`Plan (from .teamwork/${source} - this is the authority, not your memory of it):`);
 	if (plan.sentinel) lines.push(`- Sentinel verdict: ${plan.sentinel}`);
-	const milestones = Array.isArray(plan.milestones) ? plan.milestones : [];
 	if (milestones.length > 0) {
 		lines.push('- Milestones:');
 		for (const m of milestones) {
@@ -129,7 +134,12 @@ if (!plan) {
 			lines.push(`  - ${parts.join(' | ')}`);
 		}
 	}
-	const ownership = plan.ownership && typeof plan.ownership === 'object' ? Object.entries(plan.ownership) : [];
+	// campaign.json stores ownership as an array of {file, milestone} entries; the old
+	// object form is still accepted so a legacy plan.json keeps rendering.
+	const raw = plan.ownership ?? loadCampaign(paths.campaign)?.ownership ?? {};
+	const ownership = Array.isArray(raw)
+		? raw.filter((e) => e && typeof e.file === 'string').map((e) => [e.file, e.milestone])
+		: Object.entries(raw);
 	if (ownership.length > 0) {
 		lines.push('- File ownership table (one Worker per file):');
 		for (const [file, milestone] of ownership) lines.push(`  - ${file} -> ${milestone}`);

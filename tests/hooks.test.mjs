@@ -666,7 +666,7 @@ plan([{id: 'm1', status: 'done'}]);
 	const r = run('verification-gate.mjs', {...payload(), hook_event_name: 'Stop'});
 	const out = parse(r.stdout) ?? {};
 	check('gate: blocks a done milestone with no record', out.decision === 'block', r.stdout.slice(0, 240));
-	check('gate: names the offending milestone', String(out.stopReason ?? '').includes('m1'), out.stopReason);
+	check('gate: names the offending milestone', String(out.reason ?? '').includes('m1'), out.reason);
 }
 
 // A record that exists but never names the milestone cannot be used as evidence.
@@ -719,8 +719,10 @@ writeFileSync(join(STATE, 'verifications', 'milestone-m1-verification.md'), 'm1\
 
 // A campaign that declares itself complete owes a final audit.
 reset();
-plan([{id: 'm1', status: 'done'}], {status: 'complete'});
+plan([{id: 'm1', status: 'done'}]);
 verifyRecord('m1', 'm1\nVerdict: SOUND\n');
+// The completion flag lives in campaign.json, which is the authoritative state file.
+writeFileSync(CAMPAIGN, JSON.stringify({...campaign(), status: 'complete', milestones: [{id: 'm1', status: 'done'}]}));
 {
 	const r = run('verification-gate.mjs', {...payload(), hook_event_name: 'Stop'});
 	const out = parse(r.stdout) ?? {};
@@ -965,6 +967,67 @@ function contextOf(out) {
 }
 
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+
+console.log('\nverification-gate.mjs - the block channel');
+// ZCode parses `decision:"block"` on Stop, but the continuation check requires a
+// non-empty additionalContexts, and only `reason` and `systemMessage` are pushed
+// into it. `stopReason` is display-only. A gate returning only stopReason sets
+// blockRequested, records a reason, and then the turn ends normally - the block is
+// a silent no-op. Verified against a real build: with stopReason the turn completed
+// once; with reason the same turn was pulled back four times.
+
+reset();
+plan([{id: 'm1', status: 'done'}]);
+{
+	const r = run('verification-gate.mjs', {...payload(), hook_event_name: 'Stop'});
+	const out = parse(r.stdout) ?? {};
+	check('gate: uses the reason field, not stopReason', typeof out.reason === 'string' && out.reason.length > 0, JSON.stringify(Object.keys(out)));
+	check('gate: does not rely on the display-only stopReason', out.stopReason === undefined, JSON.stringify(out).slice(0, 160));
+}
+
+// ---------------------------------------------------------------------------
+
+console.log('\nmilestone source - campaign.json is authoritative');
+// The engine writes milestones into campaign.json. Three hooks read plan.json
+// alone, so a campaign created through the CLI had no plan file, every hook found
+// nothing, and the gate was inert on the documented path.
+
+reset();
+writeFileSync(CAMPAIGN, JSON.stringify({...campaign(), milestones: [{id: 'm1', status: 'done'}]}));
+{
+	const r = run('verification-gate.mjs', {...payload(), hook_event_name: 'Stop'});
+	const out = parse(r.stdout) ?? {};
+	check('gate: reads milestones from campaign.json', out.decision === 'block', r.stdout.slice(0, 200));
+}
+
+reset();
+writeFileSync(PLAN, JSON.stringify({milestones: [{id: 'm1', status: 'done'}]}));
+{
+	const r = run('verification-gate.mjs', {...payload(), hook_event_name: 'Stop'});
+	const out = parse(r.stdout) ?? {};
+	check('gate: still honours a legacy plan.json', out.decision === 'block', r.stdout.slice(0, 200));
+}
+
+reset();
+{
+	const r = run('verification-gate.mjs', {...payload(), hook_event_name: 'Stop'});
+	check('gate: silent when neither file lists milestones', r.stdout === '{}', r.stdout.slice(0, 200));
+}
+
+{
+	// Ownership recorded by the engine lives in campaign.json; the session context
+	// must render it from there, not only from a legacy plan.json.
+	reset();
+	writeFileSync(
+		CAMPAIGN,
+		JSON.stringify({...campaign(), milestones: [{id: 'm1', status: 'done', deliverable: 'port it'}], ownership: [{file: 'src/a.ts', milestone: 'm1'}]}),
+	);
+	const r = run('session-context.mjs', {...payload(), hook_event_name: 'SessionStart', source: 'startup'});
+	const ctx = parse(r.stdout)?.hookSpecificOutput?.additionalContext ?? '';
+	check('plan: ownership table read from campaign.json', ctx.includes('src/a.ts -> m1'), ctx.slice(0, 400));
+}
 
 rmSync(WORK, {recursive: true, force: true});
 

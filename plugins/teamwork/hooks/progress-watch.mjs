@@ -26,7 +26,7 @@
 import {readFileSync, existsSync, statSync, readdirSync} from 'node:fs';
 import {join} from 'node:path';
 
-import {readStdin, statePaths, loadCampaign, isCampaignActive, VERIFICATIONS_DIR, resolveProjectDir} from './_lib.mjs';
+import {readStdin, statePaths, loadCampaign, loadMilestones, isCampaignActive, VERIFICATIONS_DIR, resolveProjectDir} from './_lib.mjs';
 
 // Silence that is worth mentioning. Deliberately generous: a Worker running a long
 // build or a full test suite is not stalled, and crying wolf on every quiet minute
@@ -70,10 +70,9 @@ const campaign = loadCampaign(paths.campaign);
 if (!isCampaignActive(campaign)) emit({});
 if (campaign.progressWatch === false) emit({});
 
-const plan = readJson(paths.plan);
-if (!plan) emit({});
-
-const milestones = Array.isArray(plan.milestones) ? plan.milestones : [];
+// campaign.json is authoritative; plan.json is the legacy fallback.
+const {milestones, source} = loadMilestones(cwd);
+if (source === null) emit({});
 const open = milestones.filter((m) => m.status !== 'done' && m.verified !== true);
 if (open.length === 0) emit({});
 

@@ -79,6 +79,30 @@ export function statePaths(cwd) {
 	};
 }
 
+// Milestones, from whichever file actually holds them.
+//
+// The engine writes campaign state to campaign.json; plan.json is a legacy artifact
+// from the version that kept the milestone list separately. Three hooks read
+// plan.json directly, so a campaign created through the CLI (init -> plan -> approve)
+// produced no plan.json at all - and every hook that looked for one found nothing and
+// exited cleanly. The verification gate was therefore inert on exactly the path the
+// documentation tells users to take.
+//
+// campaign.json is authoritative. plan.json is still honoured so a campaign created
+// by an older version keeps working.
+export function loadMilestones(cwd) {
+	const paths = statePaths(cwd);
+	const campaign = loadCampaign(paths.campaign);
+	if (campaign && Array.isArray(campaign.milestones) && campaign.milestones.length > 0) {
+		return {milestones: campaign.milestones, source: 'campaign.json', campaign};
+	}
+	const plan = loadCampaign(paths.plan);
+	if (plan && Array.isArray(plan.milestones) && plan.milestones.length > 0) {
+		return {milestones: plan.milestones, source: 'plan.json', campaign};
+	}
+	return {milestones: [], source: null, campaign};
+}
+
 export function emit(obj) {
 	process.stdout.write(JSON.stringify(obj));
 	process.exit(0);

@@ -101,9 +101,13 @@ if (!existsSync(join(dir, 'first-seen.json'))) {
 switch (mode) {
 	case 'block':
 		if (event === 'Stop') {
+			// `reason`, not `stopReason`: ZCode only pushes reason/systemMessage into
+			// additionalContexts, and the continuation check requires a non-empty
+			// additionalContexts. With stopReason the block is recorded but the turn
+			// still ends - a false negative for anyone testing this channel.
 			emit({
 				decision: 'block',
-				stopReason: 'hook-probe: verifying that a plugin can veto Stop',
+				reason: 'hook-probe: verifying that a plugin can veto Stop',
 			});
 		}
 		emit({});

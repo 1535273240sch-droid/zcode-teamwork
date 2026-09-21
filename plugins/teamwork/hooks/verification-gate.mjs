@@ -23,7 +23,7 @@
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import {emit, readStdin, statePaths, loadCampaign, isCampaignActive, VERIFICATIONS_DIR, FINAL_AUDIT_NAME, resolveProjectDir} from './_lib.mjs';
+import {emit, readStdin, statePaths, loadCampaign, loadMilestones, isCampaignActive, VERIFICATIONS_DIR, FINAL_AUDIT_NAME, resolveProjectDir} from './_lib.mjs';
 
 // Verdict words the roster is allowed to end a record with. Kept in sync with the
 // verdict table in skills/teamwork-execute/SKILL.md.
@@ -110,10 +110,13 @@ const campaign = loadCampaign(paths.campaign);
 if (!isCampaignActive(campaign)) emit({});
 if (campaign.verificationGate === false) emit({});
 
-const plan = loadCampaign(paths.plan);
-if (!plan) emit({});
+// Milestones come from campaign.json when it has them (which is what the engine
+// writes), falling back to plan.json for campaigns created by an older version.
+// Reading plan.json alone meant a CLI-created campaign had no plan file, so this
+// gate saw zero milestones and exited cleanly - inert on the documented path.
+const {milestones, source} = loadMilestones(cwd);
+if (source === null) emit({});
 
-const milestones = Array.isArray(plan.milestones) ? plan.milestones : [];
 const gaps = [];
 
 for (const milestone of milestones) {
@@ -145,7 +148,7 @@ for (const milestone of milestones) {
 	}
 }
 
-const campaignStatus = String(plan.status ?? campaign.status ?? '').toLowerCase();
+const campaignStatus = String(campaign?.status ?? '').toLowerCase();
 if (campaignStatus === 'complete' || campaignStatus === 'done') {
 	if (!existsSync(join(paths.stateDir, FINAL_AUDIT_NAME))) {
 		gaps.push(`campaign is marked ${campaignStatus} but ${FINAL_AUDIT_NAME} is missing`);
@@ -161,9 +164,23 @@ const hidden = gaps.length - shown.length;
 const listed = shown.map((gap) => `- ${gap}`).join('\n');
 const overflow = hidden > 0 ? `\n- ...and ${hidden} more` : '';
 
+// The field is `reason`, not `stopReason`.
+//
+// ZCode parses both, but only `reason` and `systemMessage` are pushed into
+// additionalContexts, and the continuation check is:
+//
+//   shouldContinueAfterStopHooks = stopShouldContinue === true
+//                               && additionalContexts.length > 0
+//                               && attempts < 3
+//
+// `stopReason` is display-only, so a gate that returns only that field sets
+// blockRequested, gets a stopReason recorded, and then the turn ends normally.
+// The block is silently a no-op - which is exactly the failure this gate exists to
+// prevent, one level up. Verified against a real ZCode build: with `stopReason` the
+// turn completed once; with `reason` the same turn was pulled back four times.
 emit({
 	decision: 'block',
-	stopReason:
+	reason:
 		'Teamwork verification gate: the campaign state claims completed work with no evidence on disk.\n' +
 		`${listed}${overflow}\n` +
 		'Either write the verification record (.teamwork/verifications/<milestone>.md naming the milestone, ' +
