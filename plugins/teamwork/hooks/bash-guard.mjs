@@ -38,6 +38,8 @@ import {
 	pruneStaleTmp,
 	pruneExpired,
 	readLeaseMinutes,
+	isProtectedPath,
+	isVerificationArtifact,
 	existsSync,
 } from './_lib.mjs';
 
@@ -147,6 +149,28 @@ const opaque = OPAQUE_PATTERNS.some((re) => re.test(command));
 
 if (candidates.length === 0 && !opaque) process.exit(0); // not a file-writing command
 
+for (const {target} of candidates) {
+	if (isProtectedPath(target, cwd)) {
+		deny(
+			`Protected path via Bash: command attempts to write to ${target}. ` +
+				`Direct writes to evidence logs (.teamwork/evidence/**) and approval records (.teamwork/approval.json) ` +
+				`are strictly prohibited. Use the teamwork CLI instead.`,
+		);
+	}
+}
+
+const callerType = input.agent_type || input.agentType;
+for (const {target} of candidates) {
+	if (isVerificationArtifact(target, cwd)) {
+		if (callerType && ['worker', 'orchestrator', 'explorer'].includes(callerType.toLowerCase())) {
+			deny(
+				`Role violation via Bash: ${callerType} is not permitted to write verification records or final audits (${target}). ` +
+					`Only independent verifiers may write them via teamwork CLI.`,
+			);
+		}
+	}
+}
+
 const leaseMs = readLeaseMinutes(campaign) * 60_000;
 const {owner, source: ownerSource} = resolveOwner(input);
 
@@ -193,11 +217,14 @@ function evaluate() {
 
 	const notes = [];
 
-	if (claims.length > 0) {
-		for (const {target, key, kind, reclaimed} of claims) {
-			store[key] = {owner, ownerSource, updatedAt: now};
-			if (reclaimed) appendEvent(paths, {event: 'claimed', file: target, owner, source: ownerSource, via: `bash:${kind}`});
-		}
+		if (claims.length > 0) {
+			for (const {target, key, kind, reclaimed} of claims) {
+				store[key] = {owner, ownerSource, updatedAt: now};
+				if (reclaimed) appendEvent(paths, {event: 'claimed', file: target, owner, source: ownerSource, via: `bash:${kind}`});
+				if (isVerificationArtifact(target, cwd) && !callerType) {
+					appendEvent(paths, {event: 'unverified_writer', file: target, owner, source: ownerSource, via: `bash:${kind}`});
+				}
+			}
 		try {
 			writeAtomic(paths.lock, JSON.stringify(store, null, 2));
 		} catch {

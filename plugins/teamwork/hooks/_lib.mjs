@@ -25,12 +25,14 @@ import {createHash} from 'node:crypto';
 
 export const STATE_DIR = '.teamwork';
 export const CAMPAIGN_REL = join(STATE_DIR, 'campaign.json');
+export const APPROVAL_REL = join(STATE_DIR, 'approval.json');
 export const LOCK_REL = join(STATE_DIR, 'ownership.json');
 export const PLAN_REL = join(STATE_DIR, 'plan.json');
 export const EVENTS_NAME = 'events.jsonl';
 export const MUTEX_NAME = '.lock';
 export const VERIFICATIONS_DIR = 'verifications';
 export const FINAL_AUDIT_NAME = 'final-audit.md';
+export const EVIDENCE_DIR = 'evidence';
 
 export const DEFAULT_LEASE_MINUTES = 10;
 export const MIN_LEASE_MINUTES = 1;
@@ -48,11 +50,33 @@ export function statePaths(cwd) {
 	return {
 		stateDir,
 		campaign: join(cwd, CAMPAIGN_REL),
+		approval: join(cwd, APPROVAL_REL),
 		lock: join(cwd, LOCK_REL),
 		plan: join(cwd, PLAN_REL),
 		events: join(stateDir, EVENTS_NAME),
 		mutex: join(stateDir, MUTEX_NAME),
+		evidenceDir: join(stateDir, EVIDENCE_DIR),
 	};
+}
+
+export function isProtectedPath(filePath, cwd) {
+	const norm = lockKey(filePath, cwd);
+	const approvalTarget = lockKey(join(cwd, APPROVAL_REL), cwd);
+	if (norm === approvalTarget) return true;
+	const evidenceBase = lockKey(join(cwd, STATE_DIR, EVIDENCE_DIR), cwd);
+	const evidencePrefix = evidenceBase.endsWith(sep) ? evidenceBase : evidenceBase + sep;
+	if (norm === evidenceBase || norm.startsWith(evidencePrefix)) return true;
+	return false;
+}
+
+export function isVerificationArtifact(filePath, cwd) {
+	const norm = lockKey(filePath, cwd);
+	const finalAuditTarget = lockKey(join(cwd, STATE_DIR, FINAL_AUDIT_NAME), cwd);
+	if (norm === finalAuditTarget) return true;
+	const verificationsBase = lockKey(join(cwd, STATE_DIR, VERIFICATIONS_DIR), cwd);
+	const verificationsPrefix = verificationsBase.endsWith(sep) ? verificationsBase : verificationsBase + sep;
+	if (norm === verificationsBase || norm.startsWith(verificationsPrefix)) return true;
+	return false;
 }
 
 export function emit(obj) {

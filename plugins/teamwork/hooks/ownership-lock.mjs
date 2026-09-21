@@ -47,6 +47,8 @@ import {
 	pruneStaleTmp,
 	pruneExpired,
 	readLeaseMinutes,
+	isProtectedPath,
+	isVerificationArtifact,
 	existsSync,
 } from './_lib.mjs';
 
@@ -69,6 +71,24 @@ if (!isCampaignActive(campaign)) process.exit(0);
 
 const filePath = extractFilePath(input);
 if (!filePath) process.exit(0); // nothing to own
+
+if (isProtectedPath(filePath, cwd)) {
+	deny(
+		`Protected path: direct write or edit to ${filePath} is denied. ` +
+			`Evidence logs (.teamwork/evidence/**) and approval records (.teamwork/approval.json) ` +
+			`must only be written by the teamwork CLI.`,
+	);
+}
+
+const callerType = input.agent_type || input.agentType;
+if (isVerificationArtifact(filePath, cwd)) {
+	if (callerType && ['worker', 'orchestrator', 'explorer'].includes(callerType.toLowerCase())) {
+		deny(
+			`Role violation: ${callerType} is not permitted to write verification records or final audits (${filePath}). ` +
+				`Only independent verifiers (critic, challenger, auditor, success-auditor) may write them via teamwork CLI.`,
+		);
+	}
+}
 
 const leaseMs = readLeaseMinutes(campaign) * 60_000;
 const {owner, source: ownerSource} = resolveOwner(input);
@@ -112,7 +132,11 @@ function evaluate() {
 		return {action: 'silent'};
 	}
 
-	if (reclaimed) appendEvent(paths, {event: 'claimed', file: filePath, owner, source: ownerSource});
+		if (reclaimed) appendEvent(paths, {event: 'claimed', file: filePath, owner, source: ownerSource});
+
+		if (isVerificationArtifact(filePath, cwd) && !callerType) {
+			appendEvent(paths, {event: 'unverified_writer', file: filePath, owner, source: ownerSource});
+		}
 
 	const active = Object.keys(store).length;
 	const notes = [];

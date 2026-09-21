@@ -637,6 +637,43 @@ reset({over: {approved: false, phase: 'scoping'}});
 }
 
 // ---------------------------------------------------------------------------
+// T2: Protected paths & Role-based verification write restrictions
+// ---------------------------------------------------------------------------
+console.log('\nownership-lock.mjs & bash-guard.mjs - protected paths');
+reset();
+{
+	// 1. Direct Edit/Write to .teamwork/evidence/** is denied
+	const r1 = run('ownership-lock.mjs', payload({tool_input: {file_path: '.teamwork/evidence/2026-09-21.jsonl'}}));
+	const out1 = parse(r1.stdout)?.hookSpecificOutput;
+	check('ownership-lock: write to evidence log is denied', out1?.permissionDecision === 'deny');
+	check('ownership-lock: reason mentions protected path', out1?.permissionDecisionReason?.includes('Protected path'));
+
+	// 2. Direct Edit/Write to .teamwork/approval.json is denied
+	const r2 = run('ownership-lock.mjs', payload({tool_input: {file_path: '.teamwork/approval.json'}}));
+	const out2 = parse(r2.stdout)?.hookSpecificOutput;
+	check('ownership-lock: write to approval.json is denied', out2?.permissionDecision === 'deny');
+
+	// 3. Worker attempting to write to .teamwork/verifications/m1.md is denied
+	const r3 = run('ownership-lock.mjs', {
+		...payload({tool_input: {file_path: '.teamwork/verifications/m1--critic.md'}}),
+		agent_type: 'worker',
+	});
+	const out3 = parse(r3.stdout)?.hookSpecificOutput;
+	check('ownership-lock: worker writing verification is denied', out3?.permissionDecision === 'deny');
+	check('ownership-lock: reason mentions role violation', out3?.permissionDecisionReason?.includes('Role violation'));
+
+	// 4. Bash redirect to .teamwork/evidence/x.jsonl is denied
+	const r4 = run('bash-guard.mjs', bashPayload('echo bad >> .teamwork/evidence/2026-09-21.jsonl'));
+	const out4 = parse(r4.stdout)?.hookSpecificOutput;
+	check('bash-guard: redirect to evidence log is denied', out4?.permissionDecision === 'deny');
+
+	// 5. Bash redirect to .teamwork/approval.json is denied
+	const r5 = run('bash-guard.mjs', bashPayload('echo bad > .teamwork/approval.json'));
+	const out5 = parse(r5.stdout)?.hookSpecificOutput;
+	check('bash-guard: redirect to approval.json is denied', out5?.permissionDecision === 'deny');
+}
+
+// ---------------------------------------------------------------------------
 
 rmSync(WORK, {recursive: true, force: true});
 
