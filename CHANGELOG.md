@@ -6,6 +6,37 @@ The version lives in **two** places and they must stay in sync: `plugins/teamwor
 is the installed version, and `marketplace.json` is the version the client compares against to decide whether
 to offer an update. Bump both, or installed users will never be told there is a new one.
 
+## [0.3.3] — 2026-09-22
+
+One defect, found while preparing a first-task walkthrough and testing the CLI path
+end to end. It is the most consequential one yet: it disabled every hook.
+
+### Fixed
+
+- **The hooks and the engine disagreed about what makes a campaign active.** The
+  hooks required `phase === 'execution'`; the engine's `approve()` writes
+  `'approved'`. Neither list contained the other's value, so a campaign created
+  through the documented path - `init`, `plan`, `approve` - was treated by every
+  hook as non-existent. The ownership lock, the bash guard, the verification gate,
+  the spawn budget, the audit trail and the progress watch all exited silently,
+  reporting nothing and enforcing nothing.
+
+  Found by driving the real CLI and then the real gate: with a milestone marked done
+  and no verification record on disk, the gate returned `{}` instead of blocking.
+
+  Why 804 tests missed it: the hook tests built their fixture with
+  `phase: 'execution'` - the value that matched the hooks' expectation rather than
+  the engine's output. The fixture agreed with the bug. A structural test now
+  compares the two implementations' phase lists directly, and asserts that the
+  phases `approve()` enters are ones the hooks accept.
+
+  This is the second defect of the same shape: two modules reading one contract
+  differently, with the tests taking the wrong side. The first was hooks reading
+  plan.json while the engine wrote campaign.json.
+
+### Tests
+
+804 -> 808.
 ## [0.3.2] — 2026-09-22
 
 Documentation release. No behaviour change. The 0.3.1 code is unchanged.

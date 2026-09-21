@@ -224,8 +224,24 @@ export function loadCampaign(campaignPath) {
 // The ownership hooks only arm once the human has approved the charter and
 // execution has actually begun. During the scoping interview the charter exists but
 // is not approved, and the lock must stay inert.
+// The phases in which the campaign is live and its hooks should enforce.
+//
+// This must agree with lib/state.mjs. It previously did not: the hooks waited for
+// phase === 'execution' while the engine's approve() writes 'approved', a value
+// neither list contained. Every hook therefore treated a properly approved campaign
+// as non-existent and exited silently - on exactly the CLI path the documentation
+// tells users to take. The unit tests missed it because their fixture used
+// 'execution', which matched the hooks' wrong expectation rather than the engine's
+// actual output; the test agreed with the bug.
+//
+// A test now asserts the two implementations agree, and an integration test drives
+// the real CLI and then the real gate.
+export const ACTIVE_PHASES = ['approved', 'executing', 'verifying'];
+
 export function isCampaignActive(campaign) {
-	return campaign?.approved === true && campaign?.phase === 'execution';
+	if (campaign === null || typeof campaign !== 'object') return false;
+	if (campaign.approved !== true) return false;
+	return ACTIVE_PHASES.includes(campaign.phase);
 }
 
 export function writeAtomic(file, data) {

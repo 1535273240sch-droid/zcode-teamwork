@@ -102,7 +102,7 @@ function campaign(over = {}) {
 		acceptance_criteria: ['p95 < 200ms measured by bench.mjs on a cold cache'],
 		ownership_lease_minutes: 10,
 		approved: true,
-		phase: 'execution',
+		phase: 'executing',
 		...over,
 	};
 }
@@ -143,7 +143,7 @@ reset({over: {approved: false, phase: 'scoping'}});
 	check('not approved: writes no lease file', !existsSync(LEASE));
 }
 
-reset({over: {approved: false, phase: 'execution'}});
+reset({over: {approved: false, phase: 'executing'}});
 {
 	const r = run('ownership-lock.mjs', payload());
 	check('approved=false, phase=execution: still inert', r.stdout === '', r.stdout.slice(0, 160));

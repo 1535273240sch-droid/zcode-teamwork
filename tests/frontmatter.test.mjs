@@ -416,5 +416,58 @@ console.log('\n=== dispatch tool name ===');
 	check('hooks.json: bash matcher is unchanged', /"matcher":\s*"Bash"/.test(hooksJson), 'confirmed correct');
 }
 
+// --- cross-module contract -------------------------------------------------
+//
+// Bug #8 was two implementations of isCampaignActive disagreeing: the hooks waited
+// for phase 'execution' while the engine's approve() writes 'approved'. Every hook
+// treated an approved campaign as non-existent and exited silently. The unit tests
+// missed it because their fixture used 'execution' - the value that matched the
+// bug, not the engine. Tests can agree with a bug indefinitely; only comparing the
+// two implementations catches it.
+
+console.log('\n=== cross-module contract ===');
+
+{
+	const hooksLib = readFileSync(join(PLUGIN, 'hooks', '_lib.mjs'), 'utf8');
+	const stateLib = readFileSync(join(PLUGIN, 'lib', 'state.mjs'), 'utf8');
+
+	const phasesIn = (src) => {
+		const m = src.match(/ACTIVE_PHASES\s*=\s*\[([^\]]*)\]/) || src.match(/return \[([^\]]*)\]\.includes\(state\.phase\)/);
+		if (!m) return null;
+		return m[1]
+			.split(',')
+			.map((x) => x.trim().replace(/^['"]|['"]$/g, ''))
+			.filter((x) => x.length > 0)
+			.sort();
+	};
+
+	const hooksPhases = phasesIn(hooksLib);
+	const statePhases = phasesIn(stateLib);
+
+	check('contract: both modules define the active phases', hooksPhases !== null && statePhases !== null, `${hooksPhases} vs ${statePhases}`);
+	check(
+		'contract: hooks and engine agree on what makes a campaign active',
+		JSON.stringify(hooksPhases) === JSON.stringify(statePhases),
+		`hooks=${JSON.stringify(hooksPhases)} engine=${JSON.stringify(statePhases)}`,
+	);
+
+	// The engine's own approve() must land on a phase the hooks accept. This is the
+	// exact mismatch that shipped: approve() writes 'approved', which the old hooks
+	// did not list. Only the approve path is checked - 'aborted' and 'complete' are
+	// terminal phases where the hooks are deliberately inert.
+	const engine = readFileSync(join(PLUGIN, 'lib', 'engine.mjs'), 'utf8');
+	const approveBody = engine.slice(engine.indexOf('approve()'), engine.indexOf('advance('));
+	const entered = (approveBody.match(/setPhase\(state,\s*'([a-z]+)'\)/g) || [])
+		.map((m) => m.match(/'([a-z]+)'/)[1]);
+	check('contract: approve() is locatable', entered.length > 0, 'no setPhase calls found in approve()');
+	for (const phase of entered) {
+		check(
+			`contract: approve() may enter "${phase}" and the hooks accept it`,
+			statePhases.includes(phase) && hooksPhases.includes(phase),
+			`engine enters ${phase}, hooks accept ${JSON.stringify(hooksPhases)}`,
+		);
+	}
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
