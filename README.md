@@ -48,6 +48,35 @@ Teamwork 强制把「做」和「验」分开：
 - **调度器** `lib/scheduler.mjs`：依赖分批 + **共享文件检测** + 派发预算核算。两个里程碑点了同一个文件就不可能"并行"——这点在派发前查出来，比等 Worker 撞车便宜得多。
 - **计划 CLI** `lib/plan-cli.mjs`：`draft` / `schedule` / `status` 三个视图，支持 `--json`。
 
+**编排引擎**（`lib/` —— 可被调用的代码，不只是提示词）
+
+| 模块 | 职责 |
+| --- | --- |
+| `engine.mjs` | 控制面：initProject / approve / createPlan / schedule / claim / verify / final / handoff / status |
+| `state.mjs` | 版本化类型状态机，原子写，损坏文件返回 null 而非崩溃 |
+| `ownership.mjs` | 文件独占：声明式归属 + 可续租租约，`expired` 与 `held` 分开报告 |
+| `verification.mjs` | 按**影响面**决定验证人数；判定裁决（一票否决，自审不算） |
+| `journal.mjs` | 追加式日志，撕裂行跳过，可折叠出摘要 |
+| `handoff.mjs` | 停滞检测 + 会话交接（跨会话续跑） |
+| `decompose.mjs` / `scheduler.mjs` | 目标→草稿；依赖分批 + 冲突检测 |
+| `teamwork-cli.mjs` | 全部动词的命令行入口，`--json` 输出，拒绝时非零退出 |
+
+```bash
+CLI=plugins/teamwork/lib/teamwork-cli.mjs
+
+node $CLI init --objective "..." [--force]
+node $CLI decompose && node $CLI plan --milestones m.json
+node $CLI approve
+node $CLI schedule
+node $CLI can-write --file src/a.ts --milestone m1
+node $CLI verify --milestone m1 --verdicts v.json
+node $CLI status
+node $CLI stale
+node $CLI handoff
+```
+
+> **引擎不驱动会话。** 它是一组被调用的服务：平台决定了只有模型能开子代理，进程钩子也握不住计时器。所以规则在**被调用时**强制，而不是持续监控——**引擎做判断，钩子做监视**。
+
 **强制**（全部由钩子代码执行，不靠自觉）
 
 | 钩子 | 事件 | 作用 |
@@ -117,10 +146,10 @@ plugins/teamwork/          # 插件本体
   agents/                  # 8 个角色定义
   commands/                # /teamwork、/teamwork-status、/teamwork-end
   hooks/                   # 7 个钩子（独占锁 / shell 守卫 / 上下文 / 门禁 / 留痕 / 预算 / 看护）
-  lib/                     # 纯函数库（拆解 / 调度 / 计划 CLI）
+  lib/                     # 编排引擎（9 个模块：控制面 / 状态机 / 归属 / 验证 / 日志 / 交接 / 拆解 / 调度 / CLI）
   skills/                  # 访谈与执行协议
 plugins/hook-probe/        # 开发者工具：记录所有钩子事件（排查用，日常不必装）
-tests/                     # 345 项：结构校验 + 钩子行为 + 库与 CLI
+tests/                     # 578 项：结构校验 + 钩子行为 + 计划库 + 引擎与 CLI
 docs/机制说明.md            # 深入机制（含旧版迁移）
 ```
 
