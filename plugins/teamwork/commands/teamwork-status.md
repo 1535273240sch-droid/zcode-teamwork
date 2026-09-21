@@ -28,7 +28,7 @@ Followed by:
 
 1. **Milestones** — one line each: id, status, deliverable, files, who verifies it, and whether a verification record exists. Mark any milestone that is `done` without a verification file as **UNVERIFIED** in capitals; that is the gap this command exists to surface.
 2. **Ownership** — the ownership table, and which of those files currently hold a lease, with the holder and how long ago it was claimed.
-3. **Verification gaps** — the list of milestones with no `.teamwork/verifications/<id>.md`. If there are none, say so explicitly.
+3. **Verification gaps** — run `node <path-to-cli>/scripts/teamwork.mjs gate --json` to get the authoritative verification gaps (G1-G12) and report them directly, rather than computing them by hand. If there are none and gate passes, say so explicitly.
 4. **Recent events** — anything from `events.jsonl` worth acting on, especially `denied` entries, which mean two Workers actually collided, and repeated `expired` entries on the same file, which mean a Worker keeps dying.
 
 If `.teamwork/campaign.json` does not exist, say that no campaign is running in this workspace and stop — do not create anything.

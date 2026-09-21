@@ -93,28 +93,26 @@ Also ensure `.teamwork/` is gitignored — it holds runtime campaign state, not 
 
 ## Step 5 — Get approval
 
-Present the charter to the human and wait. Switch to Plan mode if you want a structured review before execution. Do not set `approved: true` yourself, and do not start Phase 2 on an assumption of consent.
+Present the charter to the human and wait. Switch to Plan mode if you want a structured review before execution. **Do not set `approved: true` yourself**, and do not start Phase 2 on an assumption of consent. Tell the user to approve by typing `/teamwork-approve`.
 
 **Warn the user about the countdown.** The platform's question panel auto-continues after five minutes by default, picking a direction on its own if nobody answers. That would let the approval gate pass itself. Tell the user to turn off **Settings → General → Ask-questions auto-continue** before running a campaign, or to keep the countdown paused by hovering over the panel while they read the charter.
 
 ## Step 6 — Hand off
 
-After approval, set `approved: true` and `phase: "execution"`, then:
+After the user approves via `/teamwork-approve` (or confirms in the question panel for manual fallback), verify the approval with `teamwork.mjs approve --check`, then:
 
 1. **Sentinel** reviews the charter and returns CLEARED or BLOCKED. Do not proceed past BLOCKED — resolve it with the human instead.
-2. **Orchestrator** decomposes into milestones with a dependency graph and a file-ownership table, and **writes the result to `.teamwork/plan.json`**. This is not optional: the plan is the only thing that keeps parallel Workers off each other, and a plan that lives only in the conversation dies with the conversation.
+2. **Orchestrator** decomposes into milestones with a dependency graph, risk levels (`low|medium|high`), and a file-ownership table (including optional `shared_files`), and **writes the result to `.teamwork/plan.json`**. This is not optional: the plan is the only thing that keeps parallel Workers off each other, and a plan that lives only in the conversation dies with the conversation.
 3. Set the goal with `/goal` so the platform's per-round verification keeps the campaign converging without you typing "continue":
 
    ```
    /goal <objective> — all acceptance criteria satisfied,
-   and every milestone in .teamwork/verifications/ has a verification record
-   written by an agent that did not implement it,
-   and .teamwork/final-audit.md exists and concludes ACHIEVED
+   and running `teamwork.mjs gate` outputs TEAMWORK-GATE: PASS
    ```
 
-   The goal text names **files**, not intentions. The per-round verifier only accepts real evidence — changed files, command output, test results — and it cannot see whether you actually dispatched a Critic. Making the verification records into files is what turns the role protocol from a promise into a check the runtime performs. Without a final-audit file, the goal simply does not pass.
+   The goal relies on the gate command to deterministically verify all evidence hash chains, role signatures, file modifications, ownership audit, and final audit. Without `TEAMWORK-GATE: PASS`, the goal simply does not pass.
 
-4. Run the pattern following the **`teamwork-execute`** skill, which fixes the dispatch loop and the escalation rules. Dispatch Workers in parallel only where the ownership table allows.
+4. Run the pattern following the **`teamwork-execute`** skill, which fixes the dispatch loop and the escalation rules. Dispatch Workers in parallel only where the ownership table allows and `mode.json` permits.
 
 ### `.teamwork/plan.json`
 
@@ -127,12 +125,14 @@ After approval, set `approved: true` and `phase: "execution"`, then:
       "deliverable": "<checkable artifact>",
       "files": ["src/a.ts"],
       "blocked_by": [],
-      "verified_by": "critic | challenger | auditor",
+      "verified_by": ["critic"],
+      "risk": "low",
       "status": "pending | in-progress | done",
       "verified": false
     }
   ],
-  "ownership": {"src/a.ts": "m1"}
+  "ownership": {"src/a.ts": "m1"},
+  "shared_files": []
 }
 ```
 

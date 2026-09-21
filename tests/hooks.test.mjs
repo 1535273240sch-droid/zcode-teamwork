@@ -600,10 +600,11 @@ reset();
 {
 	const r = run('session-context.mjs', {...payload(), hook_event_name: 'SessionStart', source: 'startup'});
 	const out = parse(r.stdout);
-	const ctx = out?.hookSpecificOutput?.additionalContext ?? '';
-	check('campaign: exits 0', r.code === 0, `code=${r.code}`);
-	check('campaign: hookEventName is SessionStart', out?.hookSpecificOutput?.hookEventName === 'SessionStart');
-	check('campaign: objective injected', ctx.includes('p95 latency'), ctx.slice(0, 120));
+		const ctx = out?.hookSpecificOutput?.additionalContext ?? '';
+		check('campaign: exits 0', r.code === 0, `code=${r.code}`);
+		check('campaign: hookEventName is SessionStart', out?.hookSpecificOutput?.hookEventName === 'SessionStart');
+		check('campaign: cli path injected', ctx.includes('TEAMWORK_CLI: node'));
+		check('campaign: objective injected', ctx.includes('p95 latency'), ctx.slice(0, 120));
 	check('campaign: integrity mode injected', ctx.includes('benchmark'));
 	check('campaign: acceptance criteria injected', ctx.includes('cold cache'));
 	check('campaign: benchmark warning injected', ctx.includes('standard library only'));

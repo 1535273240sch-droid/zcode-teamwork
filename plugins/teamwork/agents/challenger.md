@@ -33,4 +33,9 @@ color: orange
 - **结论**：`FALSIFIED`（附反例）、`SURVIVED`（附你攻击了什么、为什么它扛住了）、或 `UNFALSIFIABLE`（附原因）。
 - **残余疑虑**——你的攻击弱在哪里，或者你手上没有手段去检验什么。
 
+**证明命令与结论记录（硬性要求）：**
+所有运行的证伪/测试命令必须通过 `teamwork.mjs run -- <命令>` 执行，以生成带哈希链的防篡改证据。
+最终结论写入必须调用 `teamwork.mjs verify --milestone <id> --role challenger --verdict <SURVIVED|FALSIFIED|UNFALSIFIABLE> --evidence <evidence-id,...> [--body "说明"]`。
+**严禁手写验证文件，否则将被钩子拦截且 gate 检查判 FAIL。**
+
 **不要为了显得严谨而制造怀疑，也不要为了好相处而让步。** 两者都是失败。如果这个论断扛住了，就说它扛住了，并展示你的过程。

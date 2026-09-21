@@ -8,7 +8,7 @@
 //   node tests/frontmatter.test.mjs
 
 import {readFileSync, existsSync, readdirSync} from 'node:fs';
-import {join, dirname} from 'node:path';
+import {join, dirname, basename} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -274,13 +274,51 @@ const hooksConfig = JSON.parse(readFileSync(join(PLUGIN, 'hooks', 'hooks.json'),
 			}
 		}
 	}
-	check('hooks.json: references at least three scripts', referenced.length >= 3, referenced.join(', '));
-	for (const rel of referenced) {
-		check(`hooks.json: referenced script exists (${rel})`, existsSync(join(PLUGIN, rel)));
+		check('hooks.json: references at least three scripts', referenced.length >= 3, referenced.join(', '));
+		for (const rel of referenced) {
+			check(`hooks.json: referenced script exists (${rel})`, existsSync(join(PLUGIN, rel)));
+		}
 	}
-}
 
-console.log('\n=== protocol files are pure ASCII ===');
+	console.log('\n=== teamwork.mjs subcommands in prompts ===');
+	{
+		const KNOWN_SUBCOMMANDS = new Set([
+			'run',
+			'verify',
+			'final-audit',
+			'approve',
+			'audit-ownership',
+			'gate',
+			'progress',
+			'knowledge',
+		]);
+
+		const promptFiles = [];
+		for (const ag of AGENTS) promptFiles.push(join(PLUGIN, 'agents', `${ag}.md`));
+		for (const sk of readdirSync(join(PLUGIN, 'skills'))) {
+			promptFiles.push(join(PLUGIN, 'skills', sk, 'SKILL.md'));
+		}
+		for (const cmd of readdirSync(join(PLUGIN, 'commands'))) {
+			promptFiles.push(join(PLUGIN, 'commands', cmd));
+		}
+
+		for (const pPath of promptFiles) {
+			const content = readFileSync(pPath, 'utf8');
+			const matches = content.matchAll(/teamwork\.mjs\s+([a-z0-9-]+)/g);
+			for (const m of matches) {
+				const sub = m[1];
+				check(`prompt references valid subcommand: ${sub}`, KNOWN_SUBCOMMANDS.has(sub), sub);
+			}
+
+			// Must not teach agents to manually write verification files
+			check(
+				`no manual verification file writing in ${pPath.slice(pPath.indexOf('plugins'))}`,
+				!content.includes('手写验证文件') || content.includes('严禁手写验证文件') || content.includes('不得手写验证文件'),
+			);
+		}
+	}
+
+	console.log('\n=== protocol files are pure ASCII ===');
 // Config and hook payloads cross an encoding boundary into ZCode's runtime. An em
 // dash in a GBK environment eats the following quote and breaks the JSON outright.
 // Markdown is read as UTF-8 by the model and is fine; these are not.

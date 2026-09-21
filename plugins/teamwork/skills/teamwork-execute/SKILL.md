@@ -16,20 +16,20 @@ Phase 1 produced a charter and the human approved it. Phase 2 is the loop that t
 
 Confirm all four, and stop if any is missing:
 
-1. `.teamwork/campaign.json` has `approved: true` and `phase: "execution"`. Until both hold, the ownership hooks are inert and parallel Workers have no protection at all.
+1. `.teamwork/campaign.json` has `approved: true` and `phase: "execution"`, and `.teamwork/approval.json` exists matching the charter hash. Check with `teamwork.mjs approve --check`. Until this holds, the ownership hooks are inert and parallel Workers have no protection at all.
 2. Sentinel returned `CLEARED`, not `BLOCKED`.
-3. `.teamwork/plan.json` exists with milestones, a dependency graph, and an ownership table. If it does not, the Orchestrator has not run.
-4. The `/goal` text names the verification files, not just the objective.
+3. `.teamwork/plan.json` exists with milestones, a dependency graph, risk ratings, and an ownership table. If it does not, the Orchestrator has not run.
+4. The `/goal` text requires `teamwork.mjs gate` to output `TEAMWORK-GATE: PASS`.
 
 ## The loop
 
 Run one milestone through these five steps, then take the next one the dependency graph has unblocked.
 
-**1. Dispatch.** Send the milestone to a Worker with its file scope and its acceptance criteria. Dispatch Workers in parallel **only** where the ownership table gives them disjoint files. A milestone whose `blocked_by` is not yet done does not start.
+**1. Dispatch.** Check `.teamwork/mode.json` before dispatching. If `max_parallel` is set (e.g., degraded to 1 due to weak attribution), never exceed that concurrency limit. Send the milestone to a Worker with its file scope and its acceptance criteria. Dispatch Workers in parallel **only** where the ownership table gives them disjoint files and `mode.json` permits. A milestone whose `blocked_by` is not yet done does not start.
 
-**2. Implement.** The Worker changes only its own files, using the `Edit` and `Write` tools, and reports what changed, the exact verification command, and its raw output. A Worker that needs a file outside its scope stops and reports a conflict instead of taking it.
+**2. Implement.** The Worker changes only its own files, using the `Edit` and `Write` tools, and reports what changed, the exact verification command, and its raw output. A Worker that needs a file outside its scope stops and reports a conflict instead of taking it. Workers are strictly prohibited from writing to `.teamwork/evidence/**`, `.teamwork/approval.json`, `.teamwork/verifications/**`, and `.teamwork/final-audit.md`.
 
-**3. Verify.** Route the milestone to the role that matches what is actually in doubt — Critic for implementation defects, Challenger for a load-bearing premise, Auditor to reproduce the evidence. **Never the Worker that built it.** The verifier writes `.teamwork/verifications/<milestone>.md` containing the milestone id, the verifying role, the exact command or check, the raw output, and the verdict.
+**3. Verify.** Route the milestone to the role that matches what is actually in doubt — Critic for implementation defects, Challenger for a load-bearing premise, Auditor to reproduce the evidence. **Never the Worker that built it.** The verifier runs proof commands via `teamwork.mjs run -- <cmd>` to record hash-chained evidence, then calls `teamwork.mjs verify --milestone <id> --role <role> --verdict <verdict> --evidence <ids> [--body "text"]` to record the verification. **Never write verification files by hand.**
 
 **4. Route the verdict.**
 
@@ -65,6 +65,6 @@ At the ceiling, stop reworking and climb the escalation ladder:
 
 ## Closing the campaign
 
-When every milestone is `done` and `verified`, run the **Success Auditor** against the **charter**, not the milestone list, and have it write `.teamwork/final-audit.md` with a verdict of `ACHIEVED`, `PARTIALLY ACHIEVED`, or `NOT ACHIEVED`.
+When every milestone is `done` and `verified`, run the **Success Auditor** against the **charter**, not the milestone list. The Success Auditor executes final proof commands via `teamwork.mjs run -- <cmd>` and records the audit using `teamwork.mjs final-audit --verdict <ACHIEVED|PARTIALLY ACHIEVED|NOT ACHIEVED> --evidence <ids> [--body "text"]`.
 
-Then report to the human. A campaign honestly reported as `PARTIALLY ACHIEVED` is worth more than one confidently reported as complete — and the `/goal` will not pass without the final audit file anyway.
+Then run `teamwork.mjs gate` to verify all campaign invariants (G1-G12). A campaign honestly reported as `PARTIALLY ACHIEVED` is worth more than one confidently reported as complete — and the `/goal` will not pass without `TEAMWORK-GATE: PASS`.

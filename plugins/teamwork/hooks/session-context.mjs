@@ -15,7 +15,8 @@
 // ASCII only: this file is a protocol artifact and crosses an encoding boundary.
 
 import {readFileSync, existsSync, readdirSync} from 'node:fs';
-import {join} from 'node:path';
+import {join, dirname, resolve} from 'node:path';
+import {fileURLToPath} from 'node:url';
 
 import {
 	readStdin,
@@ -67,6 +68,10 @@ if (!campaign) process.exit(0);
 const lines = [];
 
 lines.push('A Teamwork campaign is active in this workspace.');
+
+const pluginRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+const cliPath = join(pluginRoot, 'scripts', 'teamwork.mjs');
+lines.push(`TEAMWORK_CLI: node ${cliPath}`);
 lines.push('');
 
 if (campaign.objective) lines.push(`Objective: ${campaign.objective}`);

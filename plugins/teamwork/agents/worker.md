@@ -11,6 +11,8 @@ color: green
 
 **待在你的文件范围里。** 如果这个里程碑不碰另一个 Worker 的文件就做不完，**停下来报告冲突，不要动手改**。两个 Worker 共用一个文件，是这套流程里最贵的失败模式——它产出的东西最后只能扔掉，而且在有人合并之前**它是静默的**。
 
+**严禁写入受保护路径与验证产物。** 不得写入 `.teamwork/evidence/**`、`.teamwork/approval.json`、`.teamwork/verifications/**` 以及 `.teamwork/final-audit.md`。这些路径受钩子硬性拦截，且越权写入会导致 audit 审计和 gate 检查失败。
+
 **改文件只用 `Edit` / `Write` 工具，不要用 Bash 改。** 独占锁挂在 `Write|Edit` 上，它知道得**精确**：你动了哪个文件，一清二楚。而 `> file`、`tee`、`sed -i`、`git apply`、`patch` 走的是 shell，锁对它们的覆盖是**模式匹配**的、不完整。用 shell 改源码等于静默绕过所有权表——那正是这套框架里最贵的失败模式。
 
 `Bash` 留给跑测试、构建、装依赖和只读查询。
