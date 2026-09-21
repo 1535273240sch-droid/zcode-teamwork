@@ -129,6 +129,34 @@ Teamwork 把"验"拆成**四个不同的问题**，交给**四个不同的角色
 
 ---
 
+## 与 Google Antigravity `/teamwork-preview` 的异同对比
+
+Teamwork for ZCode 深受 Google Antigravity `/teamwork-preview` 设计的启发，但在 ZCode 的平台能力和架构现实下进行了针对性的实现：
+
+| 维度 | Google Antigravity `/teamwork-preview` | Teamwork for ZCode (v0.3.0) |
+|---|---|---|
+| **执行环境** | 原生多进程 / 容器隔离 | 单进程 / 扁平化 Subagent（跨平台目录互斥锁协调） |
+| **文件独占** | 操作系统级只读/读写挂载 | `PreToolUse` (Write\|Edit + Bash) 钩子拦截租约冲突 |
+| **证据产生** | 运行时强制捕获命令 stdout/stderr | `teamwork.mjs run -- <cmd>` 产生结构化日志与 SHA-256 哈希链 |
+| **批准机制** | 平台原生 UI 批准关卡 | `UserPromptSubmit` 钩子拦截 `/teamwork-approve`，绑定 `charterHash` |
+| **身份归属** | 原生注入 Subagent ID | 尝试提取多来源 ID；若不可辨别自动降级为串行（`mode.json`）并配合事后 Git 所有权审计（R1-R3） |
+| **完成判定** | 内部 Goal Mode 综合判定 | `teamwork.mjs gate` 汇聚 12 项确定性检查（G1-G12）作为 Goal Mode 实据 |
+| **模型分层** | 官方直接支持 Flash / Pro 混用 | 角色提示词建议分层；用户可在各角色 frontmatter 中自主配置 `model` |
+| **历史隔离** | 每次沙箱完全重建 | 自动移出工作区至 `~/.teamwork-archive/`，`benchmark` 模式下防御读取历史 |
+
+---
+
+## 📚 深入架构与专题文档
+
+为了保持主 README 简洁，详细规范与机制已拆分至 `docs/` 目录：
+
+- 🛠️ [系统架构、锁协议与哈希链设计 (docs/ARCHITECTURE.md)](docs/ARCHITECTURE.md)
+- 👥 [八大角色职责与验证协议 (docs/VERIFICATION-ROLES.md)](docs/VERIFICATION-ROLES.md)
+- 🛡️ [基准评测模式与防作弊机制 (docs/BENCHMARK-MODE.md)](docs/BENCHMARK-MODE.md)
+- 🗺️ [项目路线图与已知局限 (docs/ROADMAP.md)](docs/ROADMAP.md)
+
+---
+
 ## 能帮你干什么
 
 ### ✅ 适合用
@@ -273,13 +301,13 @@ Teamwork 把"验"拆成**四个不同的问题**，交给**四个不同的角色
 
 ### 更新后怎么确认生效
 
-对着[安装后验证](#安装后验证)那三条重新核对一遍。0.2.0 之后应该是：
+对着[安装后验证](#安装后验证)那三条重新核对一遍。0.3.0 之后应该是：
 
 - 2 个 skills（`teamwork` + `teamwork-execute`）
-- 3 个 commands（`/teamwork`、`/teamwork-status`、`/teamwork-end`）
-- **3 条 Hook**：`SessionStart`(`*`)、`PreToolUse`(`Write|Edit`)、`PreToolUse`(`Bash`)
+- 4 个 commands（`/teamwork`、`/teamwork-approve`、`/teamwork-status`、`/teamwork-end`）
+- **4 条 Hook**：`SessionStart`(`*`)、`UserPromptSubmit`(`.*`)、`PreToolUse`(`Write|Edit`)、`PreToolUse`(`Bash`)
 
-**只要 `PreToolUse` 的 `Bash` 那条不在，就是没更新成功或者没开新会话。**
+**只要 `UserPromptSubmit` 或 `PreToolUse` 的 `Bash` 那条不在，就是没更新成功或者没开新会话。**
 
 ---
 
@@ -288,21 +316,22 @@ Teamwork 把"验"拆成**四个不同的问题**，交给**四个不同的角色
 三个地方核对：
 
 **1. Settings → Plugins → 点 teamwork**
-应列出：8 个 agents、2 个 skills、3 个 commands、3 个 hook 脚本。
+应列出：8 个 agents、2 个 skills、4 个 commands、4 个 hook 脚本。
 
 **2. Settings → Subagents**
 应出现 **Plugin subagents** 分组，里面有 `sentinel` / `orchestrator` / `explorer` / `worker` / `critic` / `challenger` / `auditor` / `success-auditor`。
 
 **3. Settings → Hooks**
-应出现**三条只读**条目，来源都指向插件目录：
+应出现**四条只读**条目，来源都指向插件目录：
 
 | 事件 | matcher | 作用 |
 |---|---|---|
-| `SessionStart` | `*` | 注入宪章与计划 |
-| `PreToolUse` | `Write\|Edit` | 文件独占锁 |
-| `PreToolUse` | `Bash` | shell 写入守卫 |
+| `SessionStart` | `*` | 注入宪章、计划与跨轮知识 |
+| `UserPromptSubmit` | `.*` | 用户批准关卡与宪章哈希绑定 |
+| `PreToolUse` | `Write\|Edit` | 文件独占锁与保护路径防御 |
+| `PreToolUse` | `Bash` | shell 写入守卫与基准归档隔离 |
 
-三条都对了，就装好了。
+四条都对了，就装好了。
 
 ---
 

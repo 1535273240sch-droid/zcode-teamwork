@@ -6,6 +6,25 @@ The version lives in **two** places and they must stay in sync: `plugins/teamwor
 is the installed version, and `marketplace.json` is the version the client compares against to decide whether
 to offer an update. Bump both, or installed users will never be told there is a new one.
 
+## [0.3.0] — 2026-09-21
+
+A hardening and mechanical enforcement release. Moves Teamwork from "convention-based" promises to "mechanism-based" enforcement across evidence, approval, attribution, completion gating, and workspace isolation.
+
+### Breaking Changes
+- **Approval Gate & Charter Hash Invalidation (T3):** Setting `approved: true` by Agent editing `campaign.json` is no longer sufficient to arm ownership hooks. Approval must be triggered by the user via `/teamwork-approve` (or sentinel token) through the `UserPromptSubmit` hook, writing `.teamwork/approval.json` with the canonical `charter_sha256`. Any modification to the charter after approval invalidates execution and disarms hooks until re-approved.
+
+### Added — Enforcement & Verification
+- **Tool-produced Evidence & SHA-256 Hash Chaining (T2):** Proof commands must be executed via `teamwork.mjs run -- <cmd>` generating structured, hash-chained entries in `.teamwork/evidence/<UTC-date>.jsonl`. Verifiers record verdicts via `teamwork.mjs verify` and `teamwork.mjs final-audit` referencing verified evidence IDs.
+- **Protected Paths (T2):** Direct edits and shell writes/redirects to `.teamwork/evidence/**` and `.teamwork/approval.json` are denied at hook level. Workers are forbidden from writing verification records.
+- **Deterministic Ownership Audit & Degradation (T4):** Weak attribution under `distributed-coding` writes `.teamwork/mode.json` (`max_parallel: 1`) to degrade to serial execution. `teamwork.mjs audit-ownership` checks Git diff against `base_sha` for unauthorized file edits (R1-R3).
+- **Deterministic Completion Gate (T5):** `teamwork.mjs gate [--json]` unifies completion evaluation into 12 checkable invariants (G1-G12).
+- **Progress Heartbeat & Milestone Handoff (T7):** `teamwork.mjs progress <beat|set>` tracks heartbeat, start/end snapshots, and stall detection; `.teamwork/handoff.md` stores handoff notes.
+- **External Archive Isolation & Defense (T8):** Campaigns archive to `~/.teamwork-archive/` outside the project. In `benchmark` mode, Bash commands attempting to read archives are denied.
+- **Cross-Round Knowledge Base (T9):** `teamwork.mjs knowledge <add|list>` maintains `pitfalls.md`, `failed-approaches.md`, and `proved.md`, automatically injected into new sessions.
+- **Risk-Adaptive Verification (T10):** Milestones support `risk: low|medium|high`, requiring corresponding verifier role coverage in Gate G10.
+- **Path Security Suite (T11):** Hardened defense against `..` traversal, symlink escape, Windows 8.3 short paths, and case/prefix path variants.
+- **Seed Defect Eval Fixtures (T12):** `tests/evals/` adds `eval-leak`, `eval-premise`, and `eval-diverge` benchmarks with mock/live runner.
+
 ## [0.2.0] — 2026-09-18
 
 A correctness and closed-loop release. The concept layer was already sound; this release fixes the runtime

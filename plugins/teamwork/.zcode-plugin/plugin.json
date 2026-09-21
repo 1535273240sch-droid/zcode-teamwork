@@ -1,6 +1,6 @@
 {
   "name": "teamwork",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Collaborative multi-agent team for repo-scale migrations, simulation, and deep research. Scoping interview, eight roles, exclusive file ownership enforced for both editor and shell writes, and file-backed verification. Pairs with Goal Mode for convergence.",
   "author": {
     "name": "Teamwork for ZCode"
