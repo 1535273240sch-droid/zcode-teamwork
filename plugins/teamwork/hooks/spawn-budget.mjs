@@ -91,7 +91,12 @@ if (process.env.TEAMWORK_SPAWN_BUDGET === 'off') emit({});
 // a matcher is configuration and can be widened by mistake; enforcing the tool name
 // here means a wider matcher costs nothing instead of blocking unrelated tools.
 const toolName = pick(input, 'toolName', 'tool_name');
-if (toolName !== 'Task') emit({});
+// The real tool name on ZCode 3.14+ is `Agent`; `Task` is its documented alias.
+// The matcher is a case-sensitive regex and does NOT know about the alias, so this
+// hook must accept both - otherwise it never runs on a real machine and the budget
+// silently does nothing. Confirmed against a live install.
+const DISPATCH_TOOLS = new Set(['Task', 'Agent']);
+if (!DISPATCH_TOOLS.has(toolName)) emit({});
 
 const cwd = resolveProjectDir(input);
 const paths = statePaths(cwd);

@@ -93,13 +93,20 @@ node $CLI handoff
 
 | 钩子 | 事件 | 作用 |
 | --- | --- | --- |
-| `ownership-lock` | PreToolUse | 文件独占，编辑工具越界即拒 |
+| `ownership-lock` | PreToolUse | 文件独占，编辑工具越界即拒 ⚠️ 见下方归属限制 |
 | `bash-guard` | PreToolUse | shell 写入同样受独占约束 |
 | `spawn-budget` | PreToolUse | **派发预算硬上限**（默认 16），到顶即拒 |
 | `verification-gate` | **Stop** | 声称完成但无验证记录 → **拦住收尾** |
 | `audit-log` | PostToolUse | 自动留痕到 `events.jsonl`，含文件/命令/派发 |
 | `progress-watch` | UserPromptSubmit | 停滞检测 + 验证覆盖度提示 |
 | `session-context` | SessionStart | 注入宪章与状态 |
+
+**真机可达的钩子事件（实测）**：7 个官方事件中**真机实际可达 6 个** ——
+`PostToolUseFailure` **从不触发**（工具失败走 `PostToolUse` + `tool_response.status:"failed"`）。
+本插件不依赖它，但如果你要自己挂钩子，请知悉。
+
+> 另：`Stop` 只在**完整 turn 收口**时触发。多轮工具交互（如访谈流）中途不会触发。
+> 派发类工具的**真机名是 `Agent`**（`Task` 是别名，且 matcher 不认别名）。
 
 **关掉某个机制**
 
@@ -108,6 +115,12 @@ node $CLI handoff
 | 验证门禁 | `TEAMWORK_VERIFY_GATE=off` 或 `campaign.json: {"verificationGate": false}` |
 | 派发预算 | `TEAMWORK_SPAWN_BUDGET=off` 或 `campaign.json: {"spawnBudget": 0}` |
 | 进度看护 | `TEAMWORK_PROGRESS_WATCH=off` 或 `campaign.json: {"progressWatch": false}` |
+
+> **归属保护的真实边界（真机实测 2026-09-21）**：真机的 `Agent` 载荷里**没有任何
+> per-subagent 标识**（无 `agent_id`、无 `agent_type`），`session_id` 是**父会话**的 ID。
+> 因此同一会话内启动的多个子代理会**解析成同一个 owner** —— 此时冲突检查**不是弱化，是零保护**。
+> 唯一可靠方案是**一个 Worker 一个 ZCode 进程**，并在该进程环境设 `TEAMWORK_OWNER_TOKEN`。
+> `ownership-lock.mjs` 检测到此情况会主动告警，但**告警不等于保护**。
 
 > **诚实的边界**：钩子是一次性进程，**没有常驻计时器**。所以没有"静默 600 秒自动接管"这种 dead-man 开关——`progress-watch` 只能在下一个用户回合报告停滞。这比计时器弱，但是当前平台上能做到的最强形态。
 

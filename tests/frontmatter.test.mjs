@@ -389,5 +389,32 @@ console.log('\n=== Stop hook channel ===');
 	check('probe: does not send stopReason', !/stopReason:/.test(probe), 'a probe testing the wrong field reports a false negative');
 }
 
+// --- dispatch tool name ----------------------------------------------------
+//
+// ZCode 3.14 ships the tool as `Agent`; `Task` is its documented alias, and the
+// matcher is a case-sensitive regex that knows nothing about aliases. A matcher of
+// "Task" therefore never fires on a real machine, which made the spawn budget a
+// no-op and stopped audit-log from ever recording a dispatch. Both are asserted
+// here so the two names cannot drift apart again.
+
+console.log('\n=== dispatch tool name ===');
+
+{
+	const hooksJson = readFileSync(join(PLUGIN, 'hooks', 'hooks.json'), 'utf8');
+	check('hooks.json: the dispatch matcher covers both names', /"matcher":\s*"Task\|Agent"/.test(hooksJson), 'matcher must be Task|Agent');
+
+	const budget = readFileSync(join(PLUGIN, 'hooks', 'spawn-budget.mjs'), 'utf8');
+	check('spawn-budget: accepts Agent', /['"]Agent['"]/.test(budget), 'must accept the real tool name');
+	check('spawn-budget: accepts Task', /['"]Task['"]/.test(budget), 'must still accept the alias');
+
+	const audit = readFileSync(join(PLUGIN, 'hooks', 'audit-log.mjs'), 'utf8');
+	check('audit-log: records Agent as a dispatch', /toolName === 'Task' \|\| toolName === 'Agent'/.test(audit), 'dispatch detection must cover both');
+	check('audit-log: detects failure through the status field', /toolResponse\.status === 'failed'/.test(audit), 'PostToolUseFailure never fires on a real machine');
+
+	// The other matchers were confirmed correct against a live install.
+	check('hooks.json: edit matcher is unchanged', /"matcher":\s*"Write\|Edit"/.test(hooksJson), 'confirmed correct');
+	check('hooks.json: bash matcher is unchanged', /"matcher":\s*"Bash"/.test(hooksJson), 'confirmed correct');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

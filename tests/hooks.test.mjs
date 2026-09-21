@@ -1029,6 +1029,34 @@ reset();
 	check('plan: ownership table read from campaign.json', ctx.includes('src/a.ts -> m1'), ctx.slice(0, 400));
 }
 
+{
+	// The real tool name is Agent. A hook that only knows Task never runs, so the
+	// budget is enforced on neither name.
+	reset({over: {spawnBudget: 1}});
+	mkdirSync(STATE, {recursive: true});
+	writeFileSync(EVENTS, JSON.stringify({event: 'dispatch', tool: 'Agent', agent: 'worker'}) + '\n');
+	const r = run('spawn-budget.mjs', payload({hook_event_name: 'PreToolUse', tool_name: 'Agent', tool_input: {subagent_type: 'general-purpose'}}));
+	const out = parse(r.stdout) ?? {};
+	check('budget: denies a dispatch made through Agent', out.hookSpecificOutput?.permissionDecision === 'deny', r.stdout.slice(0, 200));
+}
+
+{
+	reset();
+	run('audit-log.mjs', {...payload(), hook_event_name: 'PostToolUse', tool_name: 'Agent', tool_input: {subagent_type: 'general-purpose', description: 'port it'}});
+	const entries = existsSync(EVENTS) ? readFileSync(EVENTS, 'utf8').trim().split('\n').map((l) => JSON.parse(l)) : [];
+	check('audit: records an Agent call as a dispatch', entries[0]?.event === 'dispatch', JSON.stringify(entries[0]));
+	check('audit: records the agent type', entries[0]?.agent === 'general-purpose', JSON.stringify(entries[0]));
+}
+
+{
+	// A failed tool arrives as PostToolUse with status "failed"; PostToolUseFailure
+	// never fires. The trail must mark it, or failures are invisible.
+	reset();
+	run('audit-log.mjs', {...payload(), hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: {command: 'exit 3'}, tool_response: {status: 'failed', exitCode: 3}});
+	const entries = readFileSync(EVENTS, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+	check('audit: marks a failure reported through status', entries[0]?.failed === true, JSON.stringify(entries[0]));
+}
+
 rmSync(WORK, {recursive: true, force: true});
 
 console.log(`\n${pass} passed, ${fail} failed`);

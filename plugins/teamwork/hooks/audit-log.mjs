@@ -83,7 +83,9 @@ if (toolName === 'Bash') {
 
 // Dispatch is the expensive operation, so it is recorded explicitly rather than
 // inferred from the tool list later.
-if (toolName === 'Task') {
+// `Agent` is the real name; `Task` is the documented alias. Missing this meant no
+// dispatch was ever recorded, so the spawn budget counted zero for every campaign.
+if (toolName === 'Task' || toolName === 'Agent') {
 	entry.event = 'dispatch';
 	const agent = toolInput.subagent_type ?? toolInput.subagentType ?? toolInput.agent;
 	if (typeof agent === 'string' && agent.length > 0) entry.agent = agent;
@@ -91,7 +93,7 @@ if (toolName === 'Task') {
 	if (description) entry.task = description;
 }
 
-if (toolName === 'TaskStop') {
+if (toolName === 'TaskStop' || toolName === 'AgentStop') {
 	entry.event = 'dispatch-stop';
 }
 
@@ -100,6 +102,9 @@ if (toolName === 'TaskStop') {
 const failed = pick(input, 'toolResponseIsError', 'tool_response_is_error');
 if (failed === true) entry.failed = true;
 if (toolResponse && typeof toolResponse === 'object' && toolResponse.is_error === true) entry.failed = true;
+// On a real machine PostToolUseFailure never fires: a failed tool comes through
+// PostToolUse with status "failed". That is the only place a failure is observable.
+if (toolResponse && typeof toolResponse === 'object' && toolResponse.status === 'failed') entry.failed = true;
 
 appendEvent(paths, entry);
 
