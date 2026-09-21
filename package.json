@@ -5,11 +5,12 @@
   "description": "Teamwork for ZCode - collaborative multi-agent campaigns with independent verification",
   "type": "module",
   "scripts": {
-    "test": "node tests/frontmatter.test.mjs && node tests/hooks.test.mjs && node tests/scripts.test.mjs && node tests/e2e-gate.test.mjs",
+    "test": "node tests/frontmatter.test.mjs && node tests/hooks.test.mjs && node tests/scripts.test.mjs && node tests/e2e-gate.test.mjs && node tests/evals/runner.mjs",
     "test:frontmatter": "node tests/frontmatter.test.mjs",
     "test:hooks": "node tests/hooks.test.mjs",
     "test:scripts": "node tests/scripts.test.mjs",
-    "test:gate": "node tests/e2e-gate.test.mjs"
+    "test:gate": "node tests/e2e-gate.test.mjs",
+    "test:evals": "node tests/evals/runner.mjs"
   },
   "repository": {
     "type": "git",
