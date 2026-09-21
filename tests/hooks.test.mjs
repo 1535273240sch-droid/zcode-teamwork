@@ -926,6 +926,69 @@ reset();
 		check('session-context: failed approaches injected', ctx.includes('Tried full AST parser'));
 	}
 
+	// ---------------------------------------------------------------------------
+	// T11: Path security - traversal, symlink escape, 8.3 names and protected paths
+	// ---------------------------------------------------------------------------
+	console.log('\nT11: path security suite');
+	{
+		reset({withCampaign: true, withApproval: true, over: {approved: true, phase: 'execution'}});
+
+		// 1. ".." traversal out of workspace
+		check('traversal out: isInsideDirectory returns false', !isInsideDirectory('src/../../outside.txt', WORK));
+		check('traversal in: lockKey normalises redundant segments', lockKey('src/../src/core.ts', WORK) === lockKey('src/core.ts', WORK));
+
+		// 2. Symlink pointing outside workspace (symlink escape)
+		const OUTSIDE_DIR = mkdtempSync(join(tmpdir(), 'teamwork-outside-'));
+		let symlinkOutCreated = false;
+		try {
+			symlinkSync(OUTSIDE_DIR, join(WORK, 'escape-link'), process.platform === 'win32' ? 'junction' : 'dir');
+			symlinkOutCreated = true;
+		} catch {}
+
+		if (symlinkOutCreated) {
+			check('symlink escape: file inside outside-pointing symlink is NOT inside workspace', !isInsideDirectory('escape-link/secret.txt', WORK));
+			rmSync(OUTSIDE_DIR, {recursive: true, force: true});
+		} else {
+			console.log('  SKIP  symlink escape test (symlink creation not permitted on this platform)');
+		}
+
+		// 3. Windows 8.3 short names normalisation
+		if (process.platform === 'win32') {
+			try {
+				const shortPath = join(WORK, 'PROGRA~1');
+				// Test that lockKey handles short path gracefully without throwing
+				const k = lockKey(shortPath, WORK);
+				check('win32 8.3 path: lockKey handles short path without throwing', typeof k === 'string');
+			} catch (err) {
+				check('win32 8.3 path: threw error', false, err.message);
+			}
+		}
+
+		// 4. Protected path variants (relative, with ./, absolute, case variants)
+		const protectedVariants = [
+			'.teamwork/evidence/audit.jsonl',
+			'./.teamwork/evidence/sub/audit.jsonl',
+			join(WORK, '.teamwork', 'evidence', 'today.jsonl'),
+			'.teamwork/approval.json',
+			'./.teamwork/approval.json',
+			join(WORK, '.teamwork', 'approval.json'),
+		];
+		if (process.platform === 'win32' || process.platform === 'darwin') {
+			protectedVariants.push('.TEAMWORK/EVIDENCE/upper.jsonl');
+			protectedVariants.push('.TEAMWORK/APPROVAL.JSON');
+		}
+
+		for (const target of protectedVariants) {
+			const rWrite = run('ownership-lock.mjs', payload({tool_input: {file_path: target}}));
+			const outWrite = parse(rWrite.stdout)?.hookSpecificOutput;
+			check(`ownership-lock denies protected variant: ${target}`, outWrite?.permissionDecision === 'deny');
+
+			const rBash = run('bash-guard.mjs', bashPayload(`echo exploit > "${target}"`));
+			const outBash = parse(rBash.stdout)?.hookSpecificOutput;
+			check(`bash-guard denies protected variant: ${target}`, outBash?.permissionDecision === 'deny');
+		}
+	}
+
 // ---------------------------------------------------------------------------
 
 rmSync(WORK, {recursive: true, force: true});
