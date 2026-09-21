@@ -2,7 +2,7 @@
   "name": "zcode-teamwork-market",
   "version": "0.2.0",
   "private": true,
-  "description": "Teamwork for ZCode - collaborative multi-agent campaigns with independent verification",
+  "description": "Teamwork for ZCode - 给 ZCode 用的多智能体协作框架：先访谈定死目标，再派八个角色分工协作、独立验证",
   "type": "module",
   "scripts": {
     "test": "node tests/frontmatter.test.mjs && node tests/hooks.test.mjs",
@@ -11,10 +11,17 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/1535273240sch-droid/teamwork-.git"
+    "url": "https://github.com/1535273240sch-droid/zcode-teamwork.git"
   },
   "license": "MIT",
   "engines": {
     "node": ">=18"
-  }
+  },
+  "keywords": [
+    "zcode",
+    "plugin",
+    "multi-agent",
+    "teamwork",
+    "agent"
+  ]
 }
