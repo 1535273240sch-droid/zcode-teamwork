@@ -142,6 +142,18 @@ if (!existsSync(paths.campaign)) process.exit(0);
 const command = input?.tool_input?.command;
 if (typeof command !== 'string' || command.length === 0) process.exit(0);
 
+const campaign = loadCampaign(paths.campaign);
+if (campaign?.integrity_mode === 'benchmark') {
+	const archivePatterns = [/\.teamwork-archive/i, /\.teamwork[/\\]history/i];
+	const readCommands = /\b(?:cat|type|grep|rg|head|tail|more|less|findstr|awk|sed|python|node|perl)\b/i;
+	if (archivePatterns.some((p) => p.test(command)) && readCommands.test(command)) {
+		deny(
+			'Benchmark mode security policy: reading campaign archives (.teamwork-archive or .teamwork/history) ' +
+				'is strictly prohibited to prevent cross-campaign contamination or cheat.',
+		);
+	}
+}
+
 const candidates = extractTargets(command).filter(({target}) => insideCwd(target, cwd));
 const opaque = OPAQUE_PATTERNS.some((re) => re.test(command));
 
@@ -170,8 +182,6 @@ for (const {target} of candidates) {
 }
 
 if (!isArmed(cwd)) process.exit(0);
-
-const campaign = loadCampaign(paths.campaign);
 
 const leaseMs = readLeaseMinutes(campaign) * 60_000;
 const {owner, source: ownerSource} = resolveOwner(input);

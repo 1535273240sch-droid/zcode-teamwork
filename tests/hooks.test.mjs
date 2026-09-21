@@ -851,6 +851,46 @@ reset();
 		check('session-context: handoff context injected', ctx.includes('Milestone 1 Handoff') && ctx.includes('Next step is m2.'));
 	}
 
+	// ---------------------------------------------------------------------------
+	// T8: Archive isolation & bash-guard read defense in benchmark mode
+	// ---------------------------------------------------------------------------
+	console.log('\narchive read defense - bash-guard');
+	{
+		// 1. benchmark mode -> reading .teamwork-archive is denied
+		reset({
+			withCampaign: true,
+			withApproval: true,
+			over: {approved: true, phase: 'execution', integrity_mode: 'benchmark'},
+		});
+		const rCatArchive = run(
+			'bash-guard.mjs',
+			bashPayload('cat ~/.teamwork-archive/abc123/2026-09-21/plan.json'),
+		);
+		const outCat = parse(rCatArchive.stdout)?.hookSpecificOutput;
+		check('benchmark: cat .teamwork-archive is denied', outCat?.permissionDecision === 'deny');
+
+		// 2. benchmark mode -> grep in .teamwork/history is denied
+		const rGrepHistory = run(
+			'bash-guard.mjs',
+			bashPayload('grep -r "test" .teamwork/history/2026/'),
+		);
+		const outGrep = parse(rGrepHistory.stdout)?.hookSpecificOutput;
+		check('benchmark: grep .teamwork/history is denied', outGrep?.permissionDecision === 'deny');
+
+		// 3. development mode -> reading archive is not denied
+		reset({
+			withCampaign: true,
+			withApproval: true,
+			over: {approved: true, phase: 'execution', integrity_mode: 'development'},
+		});
+		const rDevCat = run(
+			'bash-guard.mjs',
+			bashPayload('cat ~/.teamwork-archive/abc123/2026-09-21/plan.json'),
+		);
+		const outDev = parse(rDevCat.stdout)?.hookSpecificOutput;
+		check('development: reading archive is not denied', outDev?.permissionDecision !== 'deny');
+	}
+
 // ---------------------------------------------------------------------------
 
 rmSync(WORK, {recursive: true, force: true});
