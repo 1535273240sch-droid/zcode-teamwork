@@ -763,6 +763,37 @@ reset();
 	check('gate: tolerant of a missing plan', r.stdout === '{}', r.stdout.slice(0, 200));
 }
 
+// A UTF-8 BOM on the state file must not disarm the gate.
+//
+// JSON.parse rejects a leading BOM, and every reader treats a parse failure as "no
+// campaign", so a BOM turned all seven hooks into silent no-ops - enforcement off,
+// nothing reported. The state file is user-editable by design and the obvious Windows
+// editors (PowerShell 5.1 `Set-Content -Encoding UTF8`, Notepad's "UTF-8 with BOM")
+// add one, so this is a realistic edit, not a synthetic one. Regression: the gate
+// must behave identically with and without the BOM.
+{
+	reset();
+	plan([{id: 'm1', status: 'done'}]);
+	const clean = run('verification-gate.mjs', {...payload(), hook_event_name: 'Stop'});
+	check('gate: blocks a claimed-done milestone with no evidence', /"decision":"block"/.test(clean.stdout), clean.stdout.slice(0, 160));
+
+	// Rewrite the same campaign with a BOM prepended, byte for byte otherwise.
+	const withBom = Buffer.concat([
+		Buffer.from([0xef, 0xbb, 0xbf]),
+		Buffer.from(readFileSync(CAMPAIGN, 'utf8'), 'utf8'),
+	]);
+	writeFileSync(CAMPAIGN, withBom);
+	const bommed = run('verification-gate.mjs', {...payload(), hook_event_name: 'Stop'});
+	check('gate: a BOM on campaign.json does not disarm it', bommed.stdout === clean.stdout, bommed.stdout.slice(0, 200));
+
+	// The ownership hook reads the same file through the same helper, so it must survive
+	// the BOM too. It stays silent for a first claim, so the evidence is the lease it
+	// writes, not its stdout.
+	rmSync(LEASE, {force: true});
+	const lock = run('ownership-lock.mjs', payload());
+	check('gate: a BOM does not make the ownership lock inert', lock.code === 0 && existsSync(LEASE), `code=${lock.code} lease=${existsSync(LEASE)}`);
+}
+
 // ---------------------------------------------------------------------------
 
 console.log('\naudit-log.mjs - tool trail');

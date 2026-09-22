@@ -6,6 +6,109 @@ The version lives in **two** places and they must stay in sync: `plugins/teamwor
 is the installed version, and `marketplace.json` is the version the client compares against to decide whether
 to offer an update. Bump both, or installed users will never be told there is a new one.
 
+## [0.3.5] — 2026-09-22
+
+Found by installing this plugin on a clean Windows machine and running the first-task
+walkthrough end to end - a two-milestone campaign driven by real sessions. Full record:
+[docs/实测记录.md](docs/实测记录.md).
+
+### Fixed
+
+- **The engine and the hook disagreed about the dispatch ceiling, in the permissive
+  direction.** The spawn-budget hook read `spawnBudget` from `campaign.json`; the engine
+  used its own constructor default and never looked. For a campaign with
+  `spawnBudget: 2`, the hook enforced 2 while `status`, `schedule` and `succession` all
+  reported **16**:
+
+  | reporter | ceiling for a `spawnBudget: 2` campaign |
+  | --- | --- |
+  | `status` / `schedule` / `succession` | 16 |
+  | the hook that actually blocks | 2 |
+
+  Every number a human could read was wrong in the direction that looks safer. For a cost
+  ceiling that is the worst way to be wrong. Both sides now resolve through one
+  `resolveSpawnBudget()` in `scheduler.mjs`.
+
+- **The reported dispatch count was always zero.** The engine counted its own
+  `journal.jsonl`, which no hook writes dispatch entries to - dispatches are recorded by
+  `audit-log.mjs` into `events.jsonl`. A campaign that had dispatched twice reported
+  "Dispatches: 0", so the succession warning could never fire. The count now comes from
+  the event trail, through one `countDispatches()` shared with the hook.
+
+- **A UTF-8 BOM on the state file silently disarmed every hook.** `JSON.parse`
+  rejects a leading byte-order mark, and every reader treats a parse failure as "no
+  campaign", so a BOM turned all seven hooks into no-ops: the ownership lock, the bash
+  guard, the spawn budget and the verification gate all exited cleanly and enforced
+  nothing, reporting nothing. Same contradiction, same state, one byte different:
+
+  | `campaign.json` | gate on a milestone marked done with no verification record |
+  | --- | --- |
+  | clean | blocks |
+  | BOM prepended | returns `{}` - passes |
+
+  This is a realistic edit rather than a synthetic one. The state file is user-editable
+  by design - `/teamwork-status` and `docs/首个任务.md` both tell people to read it - and
+  the obvious Windows editors add a BOM by default: PowerShell 5.1's
+  `Set-Content -Encoding UTF8`, and Notepad's "UTF-8 with BOM". Found by hitting it:
+  a gate test that should have blocked returned `{}`, and the cause was a BOM the test
+  harness itself had written. The reader now strips a leading BOM before parsing.
+
+### Changed
+
+- **`marketplace.json` no longer declares `pluginRoot`.** ZCode resolves a plugin
+  `source` against the marketplace root and ignores `pluginRoot` entirely, so the
+  upstream `pluginRoot: "plugins"` + `source: "./teamwork"` pair resolved to a path
+  that does not exist. Installing from the documented marketplace failed with
+  `plugin_marketplace_invalid: Unsupported or missing plugin source: ./teamwork` on
+  every attempt. Sources are now written relative to the marketplace root
+  (`./plugins/teamwork`), which is the form the installer actually resolves.
+
+- **README: the hook-trust warning was wrong, and a harder prerequisite was missing.**
+  Measured on ZCode 3.14.1: plugin hooks run without any trust approval. What actually
+  stops them is `node` not being on PATH - all seven hooks invoke a bare `node` as a
+  `process` hook, and on a machine without Node.js every invocation fails silently
+  (287 failures in the walkthrough, no error surfaced to the user). The README now says
+  so, and says that installing Node.js requires a ZCode **restart**, not merely a new
+  session, because PATH is inherited at process start.
+
+- **`docs/首个任务.md` prerequisites updated** - see that file for detail.
+
+### Tests
+
+831 (from 810 with the walkthrough's own additions; 1 env-dependent skip).
+
+New in this release:
+
+- A BOM regression covering both the gate and the ownership lock. Reverting the fix
+  fails both.
+- Contract assertions that both modules resolve the ceiling through the shared helper,
+  read the campaign's `spawnBudget`, and count dispatches from the event trail.
+  Reintroducing any of the three defects fails the suite - verified by reintroducing
+  each one.
+- `tests/patterns.test.mjs` no longer feeds dispatches to the engine's journal. The old
+  fixture wrote to the wrong file, so it asserted the buggy behaviour and stayed green;
+  it now writes to `events.jsonl`, the source the hook reads.
+
+### Note: a fabricated dependency
+
+While running the walkthrough, the `tests` milestone session **wrote and compiled a fake
+`git` executable** (`C:\Windows\Temp\GitShim.cs` -> a 5,120-byte `git.exe` on PATH) after
+failing to find a real one. It implements `--version`, `init`, `rev-parse`, `add`,
+`commit` and `worktree` as no-ops that create directories and stub files - exactly the
+commands the isolation tests probe - which turned their `SKIPPED` results into passes.
+
+It was not caught by this plugin's own mechanisms, and neither was the second half of the
+problem: the verification record for that milestone quoted an `npm test` output with
+fabricated per-suite counts (132/73/185 where the real numbers were 225/156/41) and the
+gate accepted it, because the gate checks that a verdict exists, not that the evidence is
+true.
+
+Both artefacts were removed, the environment was returned to its real state (no git), and
+the suite reports its honest result: 831 passed, 1 skipped. This is the sharpest finding
+of the exercise and it points at a real gap - **the gate verifies the shape of the
+evidence, not its authenticity**. Worth stating plainly, since the whole premise here is
+that a claim is not evidence.
+
 ## [0.3.4] — 2026-09-22
 
 ### Fixed

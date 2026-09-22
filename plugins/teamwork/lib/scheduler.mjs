@@ -19,6 +19,27 @@
 export const DEFAULT_SPAWN_BUDGET = 16;
 
 /**
+ * The dispatch ceiling in force for a campaign.
+ *
+ * One implementation, used by the engine and mirrored by the spawn-budget hook.
+ * They previously disagreed: the hook read `spawnBudget` from campaign.json, while
+ * the engine used its constructor default, so `/teamwork-status` and `succession`
+ * reported 16 for a campaign whose ceiling was 6 - and the hook enforced 6. Every
+ * number a human reads was therefore wrong in the permissive direction, which is the
+ * worst way for a cost ceiling to be wrong.
+ *
+ * Returns undefined when the ceiling is explicitly disabled (`0` or `null`), matching
+ * the hook's contract.
+ */
+export function resolveSpawnBudget(campaign) {
+	const raw = campaign?.spawnBudget;
+	if (raw === 0 || raw === null) return undefined; // explicitly disabled
+	const value = Number(raw);
+	if (!Number.isFinite(value) || value <= 0) return DEFAULT_SPAWN_BUDGET;
+	return Math.floor(value);
+}
+
+/**
  * Normalise a file path for overlap comparison. Deliberately textual: these paths
  * are plan data, not resolved filesystem entries, and resolve() on a path that
  * does not exist yet would produce a key that does not match the hook's key.

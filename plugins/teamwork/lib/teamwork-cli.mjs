@@ -232,7 +232,7 @@ switch (command) {
 			}
 			out('');
 			out(`Journal: ${r.journal.total} entries, last ${r.journal.last ?? '(none)'}`);
-			out(`Dispatches: ${r.journal.dispatches}${r.journal.agents.length > 0 ? ` (${r.journal.agents.join(', ')})` : ''}`);
+			out(`Dispatches: ${r.dispatches} of ${r.spawnBudget}${r.journal.agents.length > 0 ? ` (${r.journal.agents.join(', ')})` : ''}`);
 			if (r.complete) out('Campaign is complete and fully verified.');
 		});
 		break;

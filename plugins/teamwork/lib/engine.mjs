@@ -37,10 +37,11 @@ import {
 	findMilestone,
 	resolveStateDir,
 	stateFilePaths,
+	countDispatches,
 } from './state.mjs';
 
 import {decompose} from './decompose.mjs';
-import {schedule, DEFAULT_SPAWN_BUDGET} from './scheduler.mjs';
+import {schedule, DEFAULT_SPAWN_BUDGET, resolveSpawnBudget} from './scheduler.mjs';
 import {decideVerifiers, scopedPrompts, judgeGate, createRepairWorkstream} from './verification.mjs';
 import {claim, release, checkWrite, findCollisions, expiredEntries} from './ownership.mjs';
 import {createEvent, appendEvent, summarize} from './journal.mjs';
@@ -60,7 +61,18 @@ export class TeamworkEngine {
 		this.cwd = options.cwd ?? process.cwd();
 		this.stateDir = resolveStateDir(this.cwd, options.stateDir);
 		this.paths = stateFilePaths(this.stateDir);
-		this.budget = Number.isFinite(options.budget) ? options.budget : DEFAULT_SPAWN_BUDGET;
+		// An explicit option wins; otherwise the campaign's own spawnBudget, read
+		// lazily per call so a ceiling changed mid-campaign takes effect. Falling back
+		// to the default here was the bug: the hook enforced campaign.json while every
+		// engine report claimed the default.
+		this.explicitBudget = Number.isFinite(options.budget) ? options.budget : undefined;
+	}
+
+	/** The dispatch ceiling in force right now, campaign state included. */
+	budgetFor(state) {
+		if (this.explicitBudget !== undefined) return this.explicitBudget;
+		const resolved = resolveSpawnBudget(state ?? this.load());
+		return resolved ?? DEFAULT_SPAWN_BUDGET;
 	}
 
 	// -- state access ------------------------------------------------------
@@ -259,7 +271,7 @@ export class TeamworkEngine {
 		const state = this.load();
 		if (!state) return {ok: false, reason: 'no campaign'};
 		if (state.milestones.length === 0) return {ok: false, reason: 'no plan to schedule'};
-		return schedule(state.milestones, {budget: this.budget});
+		return schedule(state.milestones, {budget: this.budgetFor(state)});
 	}
 
 	/**
@@ -485,15 +497,18 @@ export class TeamworkEngine {
 	successionCheck() {
 		const state = this.load();
 		if (!state) return {ok: false, reason: 'no campaign'};
-		const journal = summarize(this.paths.journal);
-		const used = journal.dispatches;
-		const needed = shouldPrepareSuccession(used, this.budget);
+		// Dispatches are counted from the event trail, the same source the spawn-budget
+		// hook uses. Reading its own journal reported zero dispatches forever, so the
+		// succession warning could never fire.
+		const used = countDispatches(this.paths.events);
+		const budget = this.budgetFor(state);
+		const needed = shouldPrepareSuccession(used, budget);
 		return {
 			ok: true,
 			shouldPrepare: needed,
 			used,
-			budget: this.budget,
-			reason: needed ? `dispatches used (${used}) have reached the succession threshold of ${this.budget}` : undefined,
+			budget,
+			reason: needed ? `dispatches used (${used}) have reached the succession threshold of ${budget}` : undefined,
 		};
 	}
 
@@ -506,8 +521,8 @@ export class TeamworkEngine {
 			state,
 			journal,
 			reason: reason ?? 'succession',
-			used: journal.dispatches,
-			budget: this.budget,
+			used: countDispatches(this.paths.events),
+			budget: this.budgetFor(state),
 			stateDir: this.stateDir,
 		});
 		return {ok: true, briefing: text};
@@ -558,6 +573,11 @@ export class TeamworkEngine {
 			ownership: state.ownership ?? [],
 			gates: state.gates ?? [],
 			journal,
+			// Reported from the same trail the spawn-budget hook enforces against, and
+			// against the campaign's own ceiling rather than the library default, so what
+			// a human reads here is what the hook will actually do.
+			dispatches: countDispatches(this.paths.events),
+			spawnBudget: this.budgetFor(state),
 			complete: isCampaignComplete(state),
 		};
 	}
