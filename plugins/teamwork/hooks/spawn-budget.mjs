@@ -28,7 +28,8 @@
 
 import {readFileSync, existsSync} from 'node:fs';
 
-import {readStdin, deny, allowWithContext, statePaths, loadCampaign, isCampaignActive, DEFAULT_SPAWN_BUDGET, resolveProjectDir, reserveDispatch, countReservations} from './_lib.mjs';
+import {readStdin, deny, allowWithContext, statePaths, loadCampaign, isCampaignActive, resolveProjectDir, reserveDispatch, countReservations} from './_lib.mjs';
+import {resolveSpawnBudget, resolveMaxParallel, admittedAtConcurrency, DEFAULT_SPAWN_BUDGET} from '../lib/scheduler.mjs';
 
 // Warn once the run is close enough to the ceiling that the orchestrator should
 // start planning its last milestones rather than discovering the wall.
@@ -43,13 +44,10 @@ function pick(source, camel, snake) {
 	return source?.[camel] ?? source?.[snake];
 }
 
-function readBudget(campaign) {
-	const raw = campaign?.spawnBudget;
-	if (raw === 0 || raw === null) return undefined; // explicitly disabled
-	const value = Number(raw);
-	if (!Number.isFinite(value) || value <= 0) return DEFAULT_SPAWN_BUDGET;
-	return Math.floor(value);
-}
+// The budget resolver lives in lib/scheduler.mjs and is imported, not duplicated.
+// An earlier version had a copy here and another there; they were identical until
+// one was edited, which is the defect shape that produced the plan.json /
+// campaign.json and 'execution' / 'approved' bugs. One implementation, two callers.
 
 /** Count dispatch events already recorded in the trail. */
 function countDispatches(eventsPath) {
@@ -91,6 +89,7 @@ if (process.env.TEAMWORK_SPAWN_BUDGET === 'off') emit({});
 // a matcher is configuration and can be widened by mistake; enforcing the tool name
 // here means a wider matcher costs nothing instead of blocking unrelated tools.
 const toolName = pick(input, 'toolName', 'tool_name');
+const toolInput = pick(input, 'toolInput', 'tool_input') ?? {};
 // The real tool name on ZCode 3.14+ is `Agent`; `Task` is its documented alias.
 // The matcher is a case-sensitive regex and does NOT know about the alias, so this
 // hook must accept both - otherwise it never runs on a real machine and the budget
@@ -106,7 +105,7 @@ if (!existsSync(paths.campaign)) emit({});
 const campaign = loadCampaign(paths.campaign);
 if (!isCampaignActive(campaign)) emit({});
 
-const budget = readBudget(campaign);
+const budget = resolveSpawnBudget(campaign);
 if (budget === undefined) emit({});
 
 // The committed count comes from the trail, which is written on PostToolUse - after
@@ -135,9 +134,24 @@ if (used >= budget) {
 	);
 }
 
+// Concurrency gate, before the budget reservation.
+//
+// The budget caps the total and says nothing about shape: a campaign with sixteen
+// dispatches allowed can still start all sixteen at once. On a real run eight
+// parallel workers were all cut by one upstream teardown at 20:19:47 and six never
+// reported; a total budget would have permitted that run again.
+//
+// In-flight count comes from the reservations, which are taken here and consumed by
+// audit-log when a dispatch reports back. So this needs no new state.
+const maxParallel = resolveMaxParallel(campaign);
+if (maxParallel !== undefined) {
+	const admission = admittedAtConcurrency(reserved, maxParallel);
+	if (!admission.admitted) deny(admission.reason);
+}
+
 // Reserve before allowing: the slot must be visible to the next PreToolUse in this
 // batch, which will run before this call's PostToolUse does.
-const reservation = reserveDispatch(paths, {tool: toolName});
+const reservation = reserveDispatch(paths, {tool: toolName, agent: toolInput.subagent_type ?? toolInput.agent});
 
 if (used + 1 > budget * WARN_FRACTION) {
 	allowWithContext(

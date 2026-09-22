@@ -19,6 +19,16 @@
 export const DEFAULT_SPAWN_BUDGET = 16;
 
 /**
+ * How many dispatches may run at once unless the campaign says otherwise.
+ *
+ * Modest on purpose. Raising it finishes faster and loses more when something
+ * upstream cuts the connections, and that trade belongs to the user - hence the
+ * `maxParallel` field, settable at approval. The default only decides what happens
+ * when nobody chose.
+ */
+export const DEFAULT_MAX_PARALLEL = 4;
+
+/**
  * The dispatch ceiling in force for a campaign.
  *
  * One implementation, used by the engine and mirrored by the spawn-budget hook.
@@ -37,6 +47,85 @@ export function resolveSpawnBudget(campaign) {
 	const value = Number(raw);
 	if (!Number.isFinite(value) || value <= 0) return DEFAULT_SPAWN_BUDGET;
 	return Math.floor(value);
+}
+
+/**
+ * Ceiling on dispatches running at the same time.
+ *
+ * Separate from the total budget, and both are needed. The budget bounds what a
+ * campaign costs; this bounds how much it loses at once.
+ *
+ * The incident that motivated it: eight workers dispatched in parallel, and at
+ * 20:19:47 an upstream teardown cut all eight in-flight requests at the same
+ * instant. Six never reported. A total budget of sixteen permitted that run and
+ * would permit it again - a ceiling on the sum does not constrain the shape.
+ *
+ * The number is the user's call, set at approval, because the trade is theirs:
+ * more parallelism finishes sooner and loses more when something upstream cuts the
+ * connections. The default is deliberately modest.
+ *
+ * Returns undefined for no limit.
+ */
+export function resolveMaxParallel(campaign) {
+	const raw = campaign?.maxParallel;
+	if (raw === 0 || raw === null) return undefined; // explicitly unlimited
+	const value = Number(raw);
+	if (!Number.isFinite(value) || value <= 0) return DEFAULT_MAX_PARALLEL;
+	return Math.max(1, Math.floor(value));
+}
+
+/**
+ * Whether another dispatch may start, given how many are already in flight.
+ *
+ * Kept beside the limit it enforces so the hook and the engine cannot disagree
+ * about the rule - which is how the plan.json/campaign.json and
+ * 'execution'/'approved' defects both arose.
+ */
+export function admittedAtConcurrency(inFlight, maxParallel) {
+	if (maxParallel === undefined) return {admitted: true};
+	const running = Number.isFinite(inFlight) ? inFlight : 0;
+	if (running >= maxParallel) {
+		return {
+			admitted: false,
+			running,
+			limit: maxParallel,
+			reason:
+				`${running} of ${maxParallel} concurrent dispatch slots are in use. Wait for one to report back before ` +
+				'starting another. Concurrency is capped because a cut connection takes everything in flight with it: ' +
+				'a measured incident lost six of eight workers to one upstream teardown, and a sum-based budget did not ' +
+				'constrain that. To change the cap, a human sets "maxParallel" in .teamwork/campaign.json.',
+		};
+	}
+	return {admitted: true, running, limit: maxParallel};
+}
+
+/**
+ * Dispatches that started and never reported back.
+ *
+ * A reservation is taken at PreToolUse and consumed by audit-log at PostToolUse. An
+ * unconsumed reservation therefore means a dispatch began and its result never
+ * arrived - which is the shape of the incident, where six workers were cut in flight
+ * and nothing said so.
+ *
+ * The limit, stated because it matters when acting on this: a reservation is also
+ * unconsumed while its worker is legitimately still running. This separates "started
+ * and silent" from "started and finished", not from "started and working". At turn
+ * end nothing should still be running, which is where it is checked.
+ */
+export function pendingDispatches(reservations, now = Date.now()) {
+	const entries = Array.isArray(reservations) ? reservations : Object.values(reservations ?? {});
+	const pending = [];
+	for (const entry of entries) {
+		if (entry === null || typeof entry !== 'object') continue;
+		const at = Number(entry.at);
+		pending.push({
+			id: entry.id,
+			agent: entry.agent,
+			at: Number.isFinite(at) ? at : undefined,
+			minutes: Number.isFinite(at) ? Math.round((now - at) / 60_000) : undefined,
+		});
+	}
+	return pending;
 }
 
 /**

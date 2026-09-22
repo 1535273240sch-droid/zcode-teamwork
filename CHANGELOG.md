@@ -6,6 +6,59 @@ The version lives in **two** places and they must stay in sync: `plugins/teamwor
 is the installed version, and `marketplace.json` is the version the client compares against to decide whether
 to offer an update. Bump both, or installed users will never be told there is a new one.
 
+## [0.3.7] — 2026-09-22
+
+Concurrency, after the eight-worker incident. Two additions and one ordering fix.
+
+The incident: eight workers dispatched in parallel, and at 20:19:47 an upstream
+teardown cut all eight in-flight requests at the same instant. Six never reported.
+Every surface showed success, 2.68 million tokens produced six stub files, and the
+loss was found by a human reading the filesystem.
+
+The cause was not concurrency by itself. It is that a worker killed mid-flight
+leaves no result **and no error**, so nothing could tell it apart from a worker that
+had finished. Concurrency only decided how many were lost at once.
+
+### Added
+
+- **A concurrency ceiling, set by the user at approval** (`maxParallel`, default 4).
+  The total budget bounds what a campaign costs; it says nothing about shape. A
+  campaign with sixteen dispatches allowed can still start all sixteen at once, and
+  that is what happened. In-flight count comes from the dispatch reservations that
+  already existed, so this needed no new state. Set to 0 for no limit.
+
+- **Abandoned-dispatch detection.** A reservation is taken when a dispatch is
+  admitted and consumed when its result is recorded, so an unconsumed reservation
+  means a worker began and nothing came back. The gate now reports those at turn
+  end: six of eight workers going silent would have surfaced as a refusal instead of
+  a green board.
+
+  It separates "started and silent" from "started and finished", not from "started
+  and working" - a live worker holds a reservation too. That is why it is checked
+  where nothing should still be running.
+
+### Fixed
+
+- **The gate exited before it could see the incident.** It returned early when the
+  campaign had no milestones, which is exactly the state the eight workers were
+  dispatched into. The abandoned-dispatch check now runs before the milestone
+  source, and a campaign with no milestones but silent dispatches is blocked rather
+  than skipped.
+
+- **The budget resolver existed twice**, in `spawn-budget.mjs` and
+  `scheduler.mjs`, with identical bodies. Same shape as the plan.json /
+  campaign.json and 'execution' / 'approved' defects: two implementations of one
+  contract that agree until one is edited. The hook now imports the shared
+  resolver, and a structural test asserts it does not carry its own.
+
+### Tests
+
+882 -> 921, built from the incident's shape: six reservations against a campaign
+with no milestones, a cap of two with two in flight, and the ordering regression.
+
+Obvious in hindsight, and only visible because the incident was written down in
+enough detail to reconstruct it in a test fixture.
+
 ## [0.3.6] — 2026-09-22
 
 Closes the gap between checking what a record says and checking what is on disk.

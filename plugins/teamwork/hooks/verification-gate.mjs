@@ -25,6 +25,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import {emit, readStdin, statePaths, loadCampaign, loadMilestones, isCampaignActive, VERIFICATIONS_DIR, FINAL_AUDIT_NAME, resolveProjectDir} from './_lib.mjs';
 import {checkDeliverables, checkEvidence, MIN_DELIVERABLE_BYTES} from '../lib/evidence.mjs';
+import {pendingDispatches} from '../lib/scheduler.mjs';
 
 // Verdict words the roster is allowed to end a record with. Kept in sync with the
 // verdict table in skills/teamwork-execute/SKILL.md.
@@ -147,19 +148,66 @@ const campaign = loadCampaign(paths.campaign);
 if (!isCampaignActive(campaign)) emit({});
 if (campaign.verificationGate === false) emit({});
 
-// Milestones come from campaign.json when it has them (which is what the engine
-// writes), falling back to plan.json for campaigns created by an older version.
-// Reading plan.json alone meant a CLI-created campaign had no plan file, so this
-// gate saw zero milestones and exited cleanly - inert on the documented path.
-const {milestones, source} = loadMilestones(cwd);
-if (source === null) emit({});
-
 const gaps = [];
 
 // The audit trail, read once. It is the only record in the campaign that the model
 // does not author, which is what makes it useful for telling captured evidence from
 // evidence the model wrote itself.
 const events = loadEvents(paths.events);
+
+// Dispatches that started and never reported back.
+//
+// Checked before the milestone source, and deliberately so. The incident this comes
+// from had no milestone list at all: eight workers were dispatched into a campaign
+// whose milestones were still empty, six were cut mid-flight at 20:19:47, and the
+// gate exited early on `source === null` without looking at anything - which is why
+// every surface reported success.
+//
+// A reservation is taken when a dispatch is admitted and consumed when audit-log
+// records its result, so an unconsumed reservation means a worker began and nothing
+// came back. That is the only trace a worker killed mid-run leaves.
+//
+// The limit, stated because it matters when acting on this: a reservation is also
+// unconsumed while its worker is legitimately still running. At turn end nothing
+// should still be running, which is where this is checked - so it distinguishes
+// "started and silent" from "started and finished", not from "started and working".
+if (campaign.requireDispatchesSettled !== false) {
+	let reservations = {};
+	try {
+		reservations = JSON.parse(readFileSync(join(paths.stateDir, 'spawn-reservations.json'), 'utf8'));
+	} catch {
+		// absent or unreadable means none, which is the normal case
+	}
+	const pending = pendingDispatches(reservations);
+	if (pending.length > 0) {
+		const listed = pending
+			.slice(0, MAX_REPORTED)
+			.map((p) => `- a dispatch${p.agent ? ` for "${p.agent}"` : ''} started ${p.minutes ?? '?'} minutes ago and never reported a result`)
+			.join('\n');
+		gaps.push(
+			`${pending.length} dispatch(es) started and never reported back:\n${listed}\n` +
+				'A worker cut off mid-run leaves no result and no error, so nothing else in this report would have ' +
+				'shown it. Confirm the work was done, or dispatch it again - either way, do not close the turn as if ' +
+				'it had succeeded.',
+		);
+	}
+}
+
+// Milestones come from campaign.json when it has them (which is what the engine
+// writes), falling back to plan.json for campaigns created by an older version.
+// Reading plan.json alone meant a CLI-created campaign had no plan file, so this
+// gate saw zero milestones and exited cleanly - inert on the documented path.
+const {milestones, source} = loadMilestones(cwd);
+if (source === null) {
+	// No milestones to judge - but a zone of silent dispatches is still a finding.
+	if (gaps.length === 0) emit({});
+	else {
+		emit({
+			decision: 'block',
+			reason: `Teamwork verification gate:\n${gaps.map((g) => `- ${g}`).join('\n')}`,
+		});
+	}
+}
 
 for (const milestone of milestones) {
 	const id = milestoneId(milestone);

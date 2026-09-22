@@ -507,8 +507,25 @@ console.log('\n=== cross-module contract ===');
 	check('contract: both modules define the default spawn budget', libDefault !== null && hookDefault !== null, `${libDefault} vs ${hookDefault}`);
 	check('contract: the default spawn budget agrees', libDefault === hookDefault, `lib=${libDefault} hook=${hookDefault}`);
 
-	// Both sides must consult campaign.json's spawnBudget, not a hardcoded value.
-	check('contract: the hook reads spawnBudget from the campaign', /campaign\?\.spawnBudget|campaign\.spawnBudget/.test(sbSrc), 'hook must honour the charter');
+	// Both sides must consult campaign.json's spawnBudget, not a hardcoded value, and
+	// they must do it through one implementation. The hook used to carry its own copy
+	// of the resolver; two copies that agree until one is edited is the defect shape
+	// behind the plan.json/campaign.json and 'execution'/'approved' bugs.
+	check(
+		'contract: the hook resolves the budget through the shared helper',
+		/resolveSpawnBudget\(/.test(sbSrc),
+		'hook must not carry its own copy',
+	);
+	check(
+		'contract: the hook does not define its own budget resolver',
+		!/function readBudget\(/.test(sbSrc),
+		'found a second implementation',
+	);
+	check(
+		'contract: the hook resolves concurrency through the shared helper',
+		/resolveMaxParallel\(/.test(sbSrc),
+		'the cap is a charter field too',
+	);
 	check('contract: the engine resolves spawnBudget via the shared helper', /resolveSpawnBudget\(/.test(engineSrc), 'engine must not use its own default');
 	check('contract: the shared resolver reads campaign.json', /campaign\?\.spawnBudget/.test(schedSrc), 'resolver must read the charter field');
 
