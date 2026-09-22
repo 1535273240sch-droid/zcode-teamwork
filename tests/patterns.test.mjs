@@ -7,7 +7,7 @@
 //
 //   node tests/patterns.test.mjs
 
-import {mkdirSync, writeFileSync, rmSync, mkdtempSync, existsSync, readdirSync} from 'node:fs';
+import {mkdirSync, writeFileSync, appendFileSync, rmSync, mkdtempSync, existsSync, readdirSync} from 'node:fs';
 import {join, dirname, resolve, isAbsolute} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {tmpdir} from 'node:os';
@@ -548,9 +548,14 @@ console.log('\nengine - patterns, isolation, briefing');
 	const early = engine.successionCheck();
 	check('engine: succession is not due at the start', early.shouldPrepare === false, JSON.stringify(early));
 
-	// Four recorded dispatches against a budget of four puts the campaign at its
-	// ceiling, which is where a briefing has to exist before the successor arrives.
-	for (let i = 0; i < 4; i++) engine.log('dispatch', {agent: 'worker', task: `t${i}`});
+	// Dispatches are recorded by the audit-log hook into the event trail, so the test
+	// must write there. Feeding the engine's own journal instead is what let the count
+	// read zero forever: the fixture agreed with the bug rather than with the hook that
+	// produces the data.
+	const eventsPath = join(dir, '.teamwork', 'events.jsonl');
+	for (let i = 0; i < 4; i++) {
+		appendFileSync(eventsPath, JSON.stringify({t: Date.now(), event: 'dispatch', tool: 'Agent', agent: 'worker', task: `t${i}`}) + '\n');
+	}
 	const due = engine.successionCheck();
 	check('engine: succession is due at the ceiling', due.shouldPrepare === true, JSON.stringify(due));
 	check('engine: the count is reported', due.used === 4 && due.budget === 4, JSON.stringify(due));

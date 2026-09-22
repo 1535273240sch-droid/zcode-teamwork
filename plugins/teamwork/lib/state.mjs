@@ -29,6 +29,16 @@ import {declare} from './ownership.mjs';
 
 export const STATE_VERSION = 1;
 
+// A UTF-8 byte-order mark makes JSON.parse throw, and every reader here treats that
+// throw as "no campaign" - so a BOM silently disarms enforcement rather than raising
+// anything. The state file is user-editable by design, and on Windows the obvious
+// editors add a BOM by default (PowerShell 5.1 `Set-Content -Encoding UTF8`, Notepad's
+// "UTF-8 with BOM"). Strip it before parsing so such an edit cannot turn the gate off
+// invisibly. Kept local to this module so lib/ stays independent of hooks/.
+export function stripBom(text) {
+	return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+}
+
 export const CAMPAIGN_PHASES = ['scoping', 'charter', 'approved', 'executing', 'verifying', 'complete', 'aborted'];
 
 export const MILESTONE_STATUSES = ['pending', 'in_progress', 'verification', 'passed', 'failed'];
@@ -197,7 +207,7 @@ export function loadCampaign(path, options = {}) {
 	if (!existsSync(path)) return null;
 	let parsed;
 	try {
-		parsed = JSON.parse(readFileSync(path, 'utf8'));
+		parsed = JSON.parse(stripBom(readFileSync(path, 'utf8')));
 	} catch {
 		return null;
 	}
@@ -352,4 +362,36 @@ export function isCampaignActive(state) {
 /** A campaign is finished when it is complete and every milestone is verified. */
 export function isCampaignComplete(state) {
 	return state?.phase === 'complete' && openMilestones(state).length === 0;
+}
+
+/**
+ * Count dispatch events the hook actually recorded in the event trail.
+ *
+ * Dispatches are recorded by audit-log.mjs on PostToolUse, so this trail - not the
+ * engine's own journal - is the authority on how many Subagents were really started.
+ * The engine previously read the count from its journal, which no hook ever writes
+ * dispatch entries to, so `status` and `succession` reported "Dispatches: 0" for a
+ * campaign that had already dispatched. A cost counter that reads zero while spending
+ * is the failure mode the budget exists to prevent, so the two must share one source.
+ */
+export function countDispatches(eventsPath) {
+	if (!existsSync(eventsPath)) return 0;
+	let text;
+	try {
+		text = readFileSync(eventsPath, 'utf8');
+	} catch {
+		return 0;
+	}
+	let count = 0;
+	for (const line of stripBom(text).split('\n')) {
+		if (line.length === 0) continue;
+		// Substring test first: this runs on the critical path of every dispatch.
+		if (!line.includes('"dispatch"')) continue;
+		try {
+			if (JSON.parse(line)?.event === 'dispatch') count++;
+		} catch {
+			// a torn line at the tail of the log is not a dispatch
+		}
+	}
+	return count;
 }

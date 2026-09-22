@@ -273,7 +273,16 @@ const plugin = JSON.parse(readFileSync(join(PLUGIN, '.zcode-plugin', 'plugin.jso
 	const entryPlugin = (market.plugins ?? []).find((p) => p.name === plugin.name);
 	check('marketplace.json: lists the teamwork plugin', Boolean(entryPlugin));
 	check('marketplace.json: entry has a source', typeof entryPlugin?.source === 'string' && entryPlugin.source.length > 0);
-	check('marketplace.json: source resolves to an existing directory', existsSync(join(REPO, market.pluginRoot ?? '', entryPlugin?.source ?? '')), String(entryPlugin?.source));
+	// ZCode resolves a plugin source against the MARKETPLACE ROOT and ignores
+	// `pluginRoot`. The previous assertion joined REPO + pluginRoot + source, so it
+	// built a path that always exists and stayed green while the real installer
+	// rejected the manifest with "Unsupported or missing plugin source". Assert the
+	// resolution the installer actually performs, and forbid the field that let the
+	// two disagree.
+	check('marketplace.json: does not declare pluginRoot (ZCode ignores it)', market.pluginRoot === undefined, String(market.pluginRoot));
+	const sourceRel = String(entryPlugin?.source ?? '').replace(/^\.\//, '');
+	check('marketplace.json: source is relative to the marketplace root', sourceRel.length > 0 && !sourceRel.startsWith('/') && !/^[a-zA-Z]:/.test(sourceRel), String(entryPlugin?.source));
+	check('marketplace.json: source resolves as ZCode resolves it (against the marketplace root)', existsSync(join(REPO, sourceRel)), join(REPO, sourceRel));
 	// The marketplace `version` drives update checks; it must be bumped when the
 	// plugin changes or installs will not be offered an update.
 	check('marketplace.json: entry version matches plugin.json', entryPlugin?.version === plugin.version, `${entryPlugin?.version} vs ${plugin.version}`);
@@ -467,6 +476,53 @@ console.log('\n=== cross-module contract ===');
 			`engine enters ${phase}, hooks accept ${JSON.stringify(hooksPhases)}`,
 		);
 	}
+}
+
+// --- the dispatch ceiling is one contract, not two --------------------------
+//
+// Same shape as the phase mismatch above, found the same way: by running a real
+// campaign. The hook read the ceiling from campaign.json while the engine used its own
+// constructor default, so a campaign with `spawnBudget: 6` was enforced at 6 and
+// reported as 16 by `status` and `succession`. Every number a human could read was
+// wrong in the permissive direction. The count had the same problem - the engine
+// counted its own journal, which no hook writes dispatches to, so it reported 0 while
+// the trail held 2.
+//
+// These assertions read both implementations and compare them, so the two cannot drift
+// apart again without failing here.
+{
+	const engineSrc = readFileSync(join(PLUGIN, 'lib', 'engine.mjs'), 'utf8');
+	const sbSrc = readFileSync(join(PLUGIN, 'hooks', 'spawn-budget.mjs'), 'utf8');
+	const schedSrc = readFileSync(join(PLUGIN, 'lib', 'scheduler.mjs'), 'utf8');
+	const stateSrc = readFileSync(join(PLUGIN, 'lib', 'state.mjs'), 'utf8');
+	const hooksLibSrc = readFileSync(join(PLUGIN, 'hooks', '_lib.mjs'), 'utf8');
+
+	// The default ceiling must be the same number in both constants.
+	const defaultIn = (src) => {
+		const m = src.match(/DEFAULT_SPAWN_BUDGET\s*=\s*(\d+)/);
+		return m ? Number(m[1]) : null;
+	};
+	const libDefault = defaultIn(schedSrc);
+	const hookDefault = defaultIn(hooksLibSrc);
+	check('contract: both modules define the default spawn budget', libDefault !== null && hookDefault !== null, `${libDefault} vs ${hookDefault}`);
+	check('contract: the default spawn budget agrees', libDefault === hookDefault, `lib=${libDefault} hook=${hookDefault}`);
+
+	// Both sides must consult campaign.json's spawnBudget, not a hardcoded value.
+	check('contract: the hook reads spawnBudget from the campaign', /campaign\?\.spawnBudget|campaign\.spawnBudget/.test(sbSrc), 'hook must honour the charter');
+	check('contract: the engine resolves spawnBudget via the shared helper', /resolveSpawnBudget\(/.test(engineSrc), 'engine must not use its own default');
+	check('contract: the shared resolver reads campaign.json', /campaign\?\.spawnBudget/.test(schedSrc), 'resolver must read the charter field');
+
+	// The engine must not report the raw constructor default as the ceiling again.
+	check(
+		'contract: the engine no longer exposes a fixed budget field',
+		!/this\.budget\s*=/.test(engineSrc),
+		'this.budget was the field that ignored campaign.json',
+	);
+
+	// The dispatch count must come from the event trail, the same source the hook uses.
+	check('contract: the engine counts dispatches from the event trail', /countDispatches\(this\.paths\.events\)/.test(engineSrc), 'engine must read events.jsonl');
+	check('contract: the hook counts dispatches from the event trail', /countDispatches\(paths\.events\)/.test(sbSrc), 'hook must read events.jsonl');
+	check('contract: the trail counter is exported from the lib side', /export function countDispatches/.test(stateSrc), 'state.mjs owns file reads');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -212,9 +212,24 @@ export function extractFilePath(input) {
 	return undefined;
 }
 
+// A UTF-8 byte-order mark makes JSON.parse throw, and every reader below swallows
+// that throw as "no such campaign" - so a BOM silently disarms every hook instead of
+// raising anything. That matters because the state file is user-editable by design
+// (/teamwork-status tells people to read it), and on Windows the obvious editors add a
+// BOM by default: PowerShell 5.1's `Set-Content -Encoding UTF8` and Notepad's
+// "UTF-8 with BOM". Strip it before parsing so an edit through either tool cannot turn
+// enforcement off invisibly.
+export function stripBom(text) {
+	return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+}
+
+export function parseJsonFile(path) {
+	return JSON.parse(stripBom(readFileSync(path, 'utf8')));
+}
+
 export function loadCampaign(campaignPath) {
 	try {
-		const parsed = JSON.parse(readFileSync(campaignPath, 'utf8'));
+		const parsed = parseJsonFile(campaignPath);
 		return parsed && typeof parsed === 'object' ? parsed : undefined;
 	} catch {
 		return undefined;
@@ -274,7 +289,7 @@ export function pruneStaleTmp(dir) {
 export function readStore(path) {
 	const store = Object.create(null);
 	try {
-		const parsed = JSON.parse(readFileSync(path, 'utf8'));
+		const parsed = parseJsonFile(path);
 		if (!parsed || typeof parsed !== 'object') return store;
 		for (const [key, lease] of Object.entries(parsed)) {
 			if (DANGEROUS_KEYS.has(key)) continue;
