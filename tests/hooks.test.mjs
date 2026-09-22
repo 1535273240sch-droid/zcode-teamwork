@@ -646,9 +646,16 @@ function plan(milestones, over = {}) {
 	writeFileSync(PLAN, JSON.stringify({milestones, ...over}));
 }
 
-function verifyRecord(id, body) {
+// A record now has to cite evidence that the runtime captured, so the helper
+// creates that evidence file too. A record without a citation is blocked, which is
+// the point of the check - see the evidence section below for tests of that.
+function verifyRecord(id, body, options = {}) {
 	mkdirSync(join(STATE, 'verifications'), {recursive: true});
-	writeFileSync(join(STATE, 'verifications', `${id}.md`), body);
+	mkdirSync(join(STATE, 'evidence'), {recursive: true});
+	const stem = options.evidenceName ?? `${id}-run`;
+	writeFileSync(join(STATE, 'evidence', `${stem}.log`), options.evidenceBody ?? `captured output for ${id}\n${'x'.repeat(600)}\n`);
+	const body2 = body.includes('evidence:') ? body : `${body}evidence: .teamwork/evidence/${stem}.log\n`;
+	writeFileSync(join(STATE, 'verifications', `${id}.md`), body2);
 }
 
 // Stopping is free when nothing is claimed done.
@@ -711,7 +718,11 @@ plan([{id: 'm1', status: 'pending', verified: true}]);
 reset();
 plan([{id: 'm1', status: 'done'}]);
 mkdirSync(join(STATE, 'verifications'), {recursive: true});
-writeFileSync(join(STATE, 'verifications', 'milestone-m1-verification.md'), 'm1\nVerdict: SOUND\n');
+mkdirSync(join(STATE, 'evidence'), {recursive: true});
+	writeFileSync(join(STATE, 'evidence', 'm1-run.log'), `captured output\n${'x'.repeat(600)}\n`);
+	// The filename shape is what is under test; the evidence requirement applies to
+	// every record regardless of what it is called.
+	writeFileSync(join(STATE, 'verifications', 'milestone-m1-verification.md'), 'm1\nVerdict: SOUND\nevidence: .teamwork/evidence/m1-run.log\n');
 {
 	const r = run('verification-gate.mjs', {...payload(), hook_event_name: 'Stop'});
 	check('gate: accepts the usual record filename shapes', r.stdout === '{}', r.stdout.slice(0, 200));

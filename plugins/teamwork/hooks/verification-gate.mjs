@@ -24,6 +24,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import {emit, readStdin, statePaths, loadCampaign, loadMilestones, isCampaignActive, VERIFICATIONS_DIR, FINAL_AUDIT_NAME, resolveProjectDir} from './_lib.mjs';
+import {checkDeliverables, checkEvidence, MIN_DELIVERABLE_BYTES} from '../lib/evidence.mjs';
 
 // Verdict words the roster is allowed to end a record with. Kept in sync with the
 // verdict table in skills/teamwork-execute/SKILL.md.
@@ -74,9 +75,45 @@ function findVerificationRecord(dir, id) {
 	return candidates[0];
 }
 
+// Drop `evidence:` citations, leaving the prose. Used by the naming check so a
+// milestone id inside a path cannot stand in for naming the milestone.
+function bodyWithoutCitations(text) {
+	return String(text)
+		.split('\n')
+		.filter((line) => !/^\s*evidence\s*:/i.test(line))
+		.join('\n');
+}
+
 function verdictsIn(text) {
 	const upper = text.toUpperCase();
 	return VERDICT_TOKENS.filter((token) => upper.includes(token));
+}
+
+// Read the audit trail. The trail is written by audit-log on every tool call, so it
+// is the one record the model does not produce. Used to tell captured evidence from
+// evidence the model wrote itself.
+//
+// A torn tail line is expected after a kill and is skipped rather than failing the
+// read: the gate's job is to judge the campaign, not to be defeated by a partial
+// final write.
+function loadEvents(path) {
+	if (!existsSync(path)) return [];
+	let text;
+	try {
+		text = readFileSync(path, 'utf8');
+	} catch {
+		return [];
+	}
+	const events = [];
+	for (const line of text.split('\n')) {
+		if (line.length === 0) continue;
+		try {
+			events.push(JSON.parse(line));
+		} catch {
+			// torn tail line
+		}
+	}
+	return events;
 }
 
 const raw = await readStdin();
@@ -119,10 +156,25 @@ if (source === null) emit({});
 
 const gaps = [];
 
+// The audit trail, read once. It is the only record in the campaign that the model
+// does not author, which is what makes it useful for telling captured evidence from
+// evidence the model wrote itself.
+const events = loadEvents(paths.events);
+
 for (const milestone of milestones) {
 	const id = milestoneId(milestone);
 	if (id.length === 0) continue;
 	if (!isClaimedDone(milestone)) continue;
+
+	// Deliverables first, because a missing or stubbed output is the more serious
+	// finding and should not be buried under record-format complaints.
+	//
+	// This is the check that the code-review incident needed. Six workers reported
+	// success and wrote heading-only stubs of 802, 1008 and 1839 bytes; the gate
+	// passed every one, because it read the record and the record said the right
+	// words. A deliverable is a file on disk and can be measured.
+	const deliverableCheck = checkDeliverables(milestone, cwd, {minBytes: MIN_DELIVERABLE_BYTES});
+	for (const failure of deliverableCheck.failures) gaps.push(failure);
 
 	const record = findVerificationRecord(join(paths.stateDir, VERIFICATIONS_DIR), id);
 	if (!record) {
@@ -138,7 +190,13 @@ for (const milestone of milestones) {
 		continue;
 	}
 
-	if (!text.includes(id)) {
+	// Check the body, with evidence citations removed first.
+	//
+	// A cite names a file, and a filename often carries the milestone id - so testing
+	// the whole record lets `evidence: .teamwork/evidence/m1-run.log` satisfy a
+	// requirement that the record actually name m1. A record that only mentions its
+	// milestone inside a path has not been written about at all.
+	if (!bodyWithoutCitations(text).includes(id)) {
 		gaps.push(`"${id}" verification record never names the milestone`);
 		continue;
 	}
@@ -146,6 +204,18 @@ for (const milestone of milestones) {
 	if (verdictsIn(text).length === 0) {
 		gaps.push(`"${id}" verification record carries no verdict`);
 	}
+
+	// The record cites evidence; the evidence must exist, be non-empty, and have
+	// been captured by the hook rather than written by the claimant. The last point
+	// is the one that matters: a worker that can write its own evidence can claim
+	// any result it likes, which is exactly what happened in the code-review
+	// incident where the record carried a fabricated test transcript.
+	const evidenceCheck = checkEvidence(join(VERIFICATIONS_DIR, `${id}.md`), text, {
+		stateDir: paths.stateDir,
+		events,
+		requireEvidence: campaign.requireEvidence !== false,
+	});
+	for (const failure of evidenceCheck.failures) gaps.push(failure);
 }
 
 const campaignStatus = String(campaign?.status ?? '').toLowerCase();
@@ -183,7 +253,9 @@ emit({
 	reason:
 		'Teamwork verification gate: the campaign state claims completed work with no evidence on disk.\n' +
 		`${listed}${overflow}\n` +
-		'Either write the verification record (.teamwork/verifications/<milestone>.md naming the milestone, ' +
-		'the verifying role, the exact command, the raw output, and the verdict), or correct the milestone status. ' +
-		'A milestone the implementer verified alone does not count.',
+		'Either close the gaps above, or correct the milestone status. ' +
+		'A verification record needs the milestone name, the verifying role, a recognisable verdict, and a line ' +
+		'"evidence: .teamwork/evidence/<name>.log" citing output the runtime captured - evidence written by the ' +
+		'worker is not evidence. A declared deliverable must be a real file: present, past the size floor, with ' +
+		'body text and no placeholders. A milestone the implementer verified alone does not count.',
 });

@@ -6,6 +6,67 @@ The version lives in **two** places and they must stay in sync: `plugins/teamwor
 is the installed version, and `marketplace.json` is the version the client compares against to decide whether
 to offer an update. Bump both, or installed users will never be told there is a new one.
 
+## [0.3.6] — 2026-09-22
+
+Closes the gap between checking what a record says and checking what is on disk.
+Both incidents below are real, and both defeated the gate for the same reason.
+
+### Added
+
+- **Deliverable check.** A milestone may declare `deliverables`. Each must exist,
+  clear a size floor, contain body text beyond its headings, and carry no
+  placeholder marker. Written for the code-review incident: six workers reported
+  success and wrote heading-only stubs of 802, 1008 and 1839 bytes, while the two
+  that survived wrote 23,818 and 35,390. The gate passed all six, because it read
+  the record and the record said the right words. A file on disk can be measured;
+  an account of one cannot.
+
+- **Evidence capture.** `audit-log.mjs` now writes a fingerprint of each captured
+  command - command, exit status, byte count, hash, short tail - into
+  `.teamwork/evidence/`. Records cite it with a line
+  `evidence: .teamwork/evidence/<name>.log`, and the gate requires the citation,
+  the file, and its non-emptiness.
+
+- **Forgery detection.** The check that makes the rest worth having: if the audit
+  trail shows a `Write` call creating a file inside `evidence/`, that file is the
+  claimant's own work and citing it is rejected. Written for the second incident,
+  where a worker put a fabricated `npm test` transcript in its record and the gate
+  accepted it. Evidence has to be produced by the command, not by the claimant.
+
+- `lib/evidence.mjs`, and `tests/evidence.test.mjs` (60 assertions). The tests are
+  built from the incident shapes - the real byte counts, the real placeholder
+  marker - because a check that only passes its own fixtures has proved nothing.
+
+### Fixed
+
+- **`evidence.mjs` and `audit-log.mjs` each had a `captureEvidence`.** They differed:
+  one stored the full output, the other a fingerprint. This is the same defect shape
+  as the plan.json/campaign.json disagreement that needed a real machine to find -
+  two modules implementing one contract differently. Consolidated to one
+  implementation, which `audit-log` imports.
+
+- **A milestone id inside an evidence path satisfied the naming check.** A record
+  containing only `evidence: .teamwork/evidence/m1-run.log` counted as naming m1,
+  because the check ran over the whole text. Citations are now stripped before the
+  naming test, since a record that mentions its milestone only inside a path has not
+  been written about at all.
+
+### Limits, stated
+
+The fingerprint proves a command **ran**. It does not prove the record quotes it
+faithfully - a worker that runs the tests honestly and then misreports the numbers
+is not caught. Closing that needs the full output stored, which needs a secrets
+policy first: a code review reads `.env` files, and an evidence store that leaks
+credentials would be worse than the problem it solves. `TEAMWORK_EVIDENCE_TAIL`
+controls how much tail is kept.
+
+The deliverable check asks whether a file exists and has substance. It cannot ask
+whether the content is correct.
+
+### Tests
+
+808 -> 882.
+
 ## [0.3.5] — 2026-09-22
 
 Found by installing this plugin on a clean Windows machine and running the first-task
