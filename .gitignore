@@ -9,3 +9,4 @@ node_modules/
 # checkout would otherwise copy a previous session's probe log into the plugin
 # cache, and the next plugin version would ship with stale test residue in it.
 .zcode-probe/
+.zcode/

@@ -6,6 +6,23 @@ The version lives in **two** places and they must stay in sync: `plugins/teamwor
 is the installed version, and `marketplace.json` is the version the client compares against to decide whether
 to offer an update. Bump both, or installed users will never be told there is a new one.
 
+## [0.4.1] — 2026-09-29
+
+Universal Cross-Platform One-Click Setup, Dynamic Hook Auto-Registration, Live Black Terminal Monitor, and Safe Status Handling.
+
+### Added
+
+- **Universal Cross-Platform Installer (`scripts/install.mjs`)**: Provides zero-config deployment across any machine (Windows, Linux, macOS). Dynamically detects user home directory and workspace, auto-generates portable hook definitions, and registers them directly into both global and workspace configurations.
+- **Live OLED Black Monitor (`scripts/watch.mjs`)**: Dedicated 2-second terminal watcher providing financial terminal-grade live visualization of active milestones, dispatch budgets, active file locks, and Mermaid DAG.
+- **One-off Dashboard Script (`scripts/dashboard.mjs`)**: Instant CLI printout of mission control board.
+- **NPM Shortcuts**: Added `npm run setup`, `npm run dashboard`, and `npm run watch`.
+
+### Fixed
+
+- **Engine Status Milestone Safety**: Gracefully handles campaigns with undefined or empty milestone lists (`state.milestones ?? []`), preventing `TypeError` during early scoping phases.
+- **ZCode Desktop Settings Hook Display**: Fixed issue where the ZCode Desktop "Settings -> Hooks" interface showed empty due to missing workspace configuration file.
+- **Cross-Path Resilient Slash Command**: Enhanced `/teamwork-status` with multi-path resolution fallbacks.
+
 ## [0.4.0] — 2026-09-29
 
 100% Antigravity Orchestration Alignment: Tiered Agile Routing, OLED & Mermaid Visual Dashboard, Adaptive Deliverable Sizing, and Deterministic Re-Verification.

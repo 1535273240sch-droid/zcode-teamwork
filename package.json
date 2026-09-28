@@ -1,10 +1,13 @@
 {
   "name": "zcode-teamwork-market",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "private": true,
   "description": "Teamwork for ZCode - collaborative multi-agent campaigns with independent verification",
   "type": "module",
   "scripts": {
+    "setup": "node scripts/install.mjs",
+    "dashboard": "node scripts/dashboard.mjs",
+    "watch": "node scripts/watch.mjs",
     "test": "node tests/frontmatter.test.mjs && node tests/hooks.test.mjs && node tests/lib.test.mjs && node tests/engine.test.mjs && node tests/patterns.test.mjs && node tests/evidence.test.mjs && node tests/concurrency.test.mjs && node tests/enhancements.test.mjs",
     "test:frontmatter": "node tests/frontmatter.test.mjs",
     "test:hooks": "node tests/hooks.test.mjs",

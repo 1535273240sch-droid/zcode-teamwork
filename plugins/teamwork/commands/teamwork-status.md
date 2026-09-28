@@ -7,8 +7,9 @@ Report the current state of the Teamwork campaign in this workspace. **This is a
 
 First, run the visual dashboard renderer:
 ```bash
-node ${ZCODE_PLUGIN_ROOT}/lib/teamwork-cli.mjs dashboard
+node "${ZCODE_PLUGIN_ROOT}/lib/teamwork-cli.mjs" dashboard 2>/dev/null || node "${HOME}/.zcode/cli/plugins/cache/zcode-plugins-official/teamwork/0.4.0/lib/teamwork-cli.mjs" dashboard 2>/dev/null || node "${USERPROFILE}/.zcode/cli/plugins/cache/zcode-plugins-official/teamwork/0.4.0/lib/teamwork-cli.mjs" dashboard
 ```
+Output the rendered visual markdown report (including Mermaid diagram and progress bar) directly into the conversation.
 
 If you prefer inspecting raw files, read whatever exists:
 

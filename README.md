@@ -154,20 +154,41 @@ Total Tests: 932 passed, 0 failed, 100% compliance
 
 ---
 
-## 📦 环境要求与本地安装
+## 📦 环境要求与任意电脑一键部署 (Zero-Config)
 
 ### 环境准备
 - **Node.js**：`>= 18.0.0`（请确保 `node` 已添加到系统的环境变量 `PATH` 中）。
-- **ZCode**：支持 ZCode CLI / Desktop 任意主流版本。
+- **ZCode**：支持 Windows / macOS / Linux 任意主流 ZCode 客户端或 CLI。
 
-### 一键部署
-插件已预置在 ZCode 官方缓存与扩展空间，克隆或下载后运行：
+### 换新电脑一键自动部署
+在任何新机器上，拉取仓库后只需运行一行脚本，系统将**自动检测用户目录、动态生成绝对路径并注入 ZCode 全局与工作区设置**，彻底杜绝路径写死与钩子失效：
+
 ```powershell
-# 安装依赖
-npm install
+# 1. 克隆代码库
+git clone https://github.com/1535273240sch-droid/zcode-teamwork.git
+cd zcode-teamwork
 
-# 本地联调或查看 CLI 大盘
-node bin/teamwork.mjs dashboard
+# 2. 一键自动化部署与全量环境装配
+npm run setup
+```
+
+部署脚本会自动完成：
+1. 拷贝插件至 ZCode 官方插件扩展空间。
+2. 自动在 `~/.zcode/cli/config.json` 与当前工作区中注册 **7 大底层物理硬钩子**（让 ZCode 桌面端「设置 → 钩子」界面立刻正常显示所有钩子）。
+3. 挂载 `/teamwork`、`/teamwork-status`、`/teamwork-end` 原生指令与特种智能体角色。
+
+---
+
+## 📺 OLED 纯黑大盘与终端实时监控 (Mission Control)
+
+除了在 ZCode 对话中输入 `/teamwork-status`，您还可以直接在终端拉起专属的**黑屏实时刷新大盘**，如同金融量化终端般实时监控战况：
+
+```powershell
+# 启动黑屏实时刷新大盘（每 2 秒自动刷新，展示当前进度、心跳、独占写锁与拓扑 DAG）
+npm run watch
+
+# 单次打印当前任务看板
+npm run dashboard
 ```
 
 ---

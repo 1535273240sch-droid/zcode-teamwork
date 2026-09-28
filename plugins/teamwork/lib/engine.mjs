@@ -561,7 +561,7 @@ export class TeamworkEngine {
 			mode: state.mode,
 			integrityMode: state.integrityMode,
 			version: state.version,
-			milestones: state.milestones.map((m) => ({
+			milestones: (state.milestones ?? []).map((m) => ({
 				id: m.id,
 				status: m.status,
 				verified: m.verified === true,
