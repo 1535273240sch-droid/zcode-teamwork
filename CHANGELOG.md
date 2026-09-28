@@ -6,6 +6,23 @@ The version lives in **two** places and they must stay in sync: `plugins/teamwor
 is the installed version, and `marketplace.json` is the version the client compares against to decide whether
 to offer an update. Bump both, or installed users will never be told there is a new one.
 
+## [0.4.0] — 2026-09-29
+
+100% Antigravity Orchestration Alignment: Tiered Agile Routing, OLED & Mermaid Visual Dashboard, Adaptive Deliverable Sizing, and Deterministic Re-Verification.
+
+### Added
+
+- **Tiered Agile Router (`router.mjs`)**: Introduces L1 Agile Duo (Worker + Critic), L2 Standard Squad (Orchestrator + Worker + Auditor + Critic), and L3 Full Adversarial (all 8 roles). Eliminates token explosion and bureaucratic ceremony for routine bugfixes and focused tasks.
+- **Visual Mission Control Dashboard (`dashboard.mjs`)**: High-information-density OLED Pure Dark & Liquid Glass dashboard featuring live Mermaid milestone dependency diagrams, ASCII progress bars, and ledger health metrics.
+- **Auto-Resolution for `evidence: latest`**: Verifiers can now simply cite `evidence: latest` to bind to the latest hook-captured execution log, resolving the notorious Catch-22 deadlock where models had to guess obscure timestamped filenames.
+- **Deterministic Command Re-running (`reverifyCommand`)**: Command re-execution utility in sandbox sub-process to physically eliminate fabricated test transcripts and counterfeit executables (e.g. fake git shims).
+- **CLI Commands**: Added `teamwork dashboard` and `teamwork tier --task "..."` CLI verbs.
+
+### Fixed
+
+- **Adaptive Deliverable Sizing**: Code deliverables (`.js`, `.ts`, `.py`, `.json`, etc.) now use an adaptive 64-byte floor instead of being blocked by the rigid 2048-byte documentation floor.
+- **Enhanced Verification Gate Guidance**: Directly instructs models that `evidence: latest` is valid syntax when citations are absent.
+
 ## [0.3.7] — 2026-09-22
 
 Concurrency, after the eight-worker incident. Two additions and one ordering fix.

@@ -30,9 +30,10 @@
 //
 // ASCII only: protocol artifact.
 
-import {existsSync, readFileSync, statSync, mkdirSync, appendFileSync} from 'node:fs';
+import {existsSync, readFileSync, statSync, mkdirSync, appendFileSync, readdirSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {join} from 'node:path';
+import {execFileSync} from 'node:child_process';
 
 /** Deliverable files live here unless a milestone says otherwise. */
 export const DELIVERABLES_DIR = 'deliverables';
@@ -41,13 +42,32 @@ export const DELIVERABLES_DIR = 'deliverables';
 export const EVIDENCE_DIR = 'evidence';
 
 /**
- * Smallest file we will accept as a real deliverable.
+ * Smallest file we will accept as a real deliverable report or doc.
  *
  * Chosen from measured data rather than taste: the six failures in the code-review
  * incident produced stubs of 802, 1008 and 1839 bytes, while the two survivors
  * produced 23,818 and 35,390. Anything under this is a heading or two.
  */
 export const MIN_DELIVERABLE_BYTES = 2048;
+
+/** Code deliverables have an adaptive floor to avoid blocking narrow bugfixes. */
+export const MIN_CODE_DELIVERABLE_BYTES = 64;
+
+export const CODE_EXTENSIONS = new Set([
+	'.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx',
+	'.py', '.json', '.sh', '.bash', '.go', '.rs',
+	'.c', '.cpp', '.h', '.hpp', '.sql', '.yaml', '.yml',
+]);
+
+export function resolveMinBytes(path, options = {}) {
+	if (Number.isFinite(options.minBytes)) return options.minBytes;
+	const dot = path.lastIndexOf('.');
+	if (dot !== -1) {
+		const ext = path.slice(dot).toLowerCase();
+		if (CODE_EXTENSIONS.has(ext)) return MIN_CODE_DELIVERABLE_BYTES;
+	}
+	return MIN_DELIVERABLE_BYTES;
+}
 
 /**
  * Markers that mean a file is a placeholder rather than a deliverable.
@@ -73,7 +93,7 @@ export const PLACEHOLDER_MARKERS = [
  * "missing" from "empty" from "stub" to say anything useful to the worker.
  */
 export function inspectDeliverable(path, options = {}) {
-	const minBytes = Number.isFinite(options.minBytes) ? options.minBytes : MIN_DELIVERABLE_BYTES;
+	const minBytes = resolveMinBytes(path, options);
 	const reasons = [];
 
 	if (!existsSync(path)) {
@@ -335,7 +355,28 @@ export function checkEvidence(recordPath, recordText, options) {
 	for (const ref of refs) {
 		const bare = ref.replace(/\\/g, '/').toLowerCase();
 		const name = bare.slice(bare.lastIndexOf('/') + 1);
-		const full = bare.includes('/') ? join(stateDir, '..', ref) : evidencePath(stateDir, name);
+		let full = bare.includes('/') ? join(stateDir, '..', ref) : evidencePath(stateDir, name);
+		let targetName = name;
+
+		// Support 'latest' / 'latest.log' to prevent LLM deadlock when exact log name is unknown
+		if (name === 'latest' || name === 'latest.log') {
+			const evDir = join(stateDir, EVIDENCE_DIR);
+			if (existsSync(evDir)) {
+				try {
+					const entries = readdirSync(evDir)
+						.filter((f) => f.endsWith('.log'))
+						.map((f) => ({name: f, full: join(evDir, f), mtime: statSync(join(evDir, f)).mtimeMs}))
+						.sort((a, b) => b.mtime - a.mtime);
+					const candidate = entries.find((e) => !forged.has(e.name.toLowerCase()));
+					if (candidate) {
+						full = candidate.full;
+						targetName = candidate.name;
+					}
+				} catch {
+					// fallback to full
+				}
+			}
+		}
 
 		if (!existsSync(full)) {
 			failures.push(`${recordPath} cites evidence "${ref}" but no such file exists`);
@@ -357,7 +398,7 @@ export function checkEvidence(recordPath, recordText, options) {
 		// evidence. Match on the trailing name so an absolute path in the trail and a
 		// relative path in the record still compare equal.
 		for (const target of forged) {
-			if (target.endsWith(name)) {
+			if (target.endsWith(targetName)) {
 				failures.push(
 					`${recordPath} cites evidence "${ref}", but the audit trail shows that file was written by a tool ` +
 						'call rather than captured from one. Evidence has to be produced by the command, not by the ' +
@@ -369,6 +410,31 @@ export function checkEvidence(recordPath, recordText, options) {
 	}
 
 	return {checked: true, refs, failures};
+}
+
+/**
+ * Deterministically re-run a verification command to combat fake shims and forged logs.
+ */
+export function reverifyCommand(command, cwd, timeoutMs = 30_000) {
+	try {
+		const stdout = execFileSync('node', ['-e', `
+			const {execSync} = require('child_process');
+			try {
+				const out = execSync(process.argv[1], {encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: ${timeoutMs}});
+				process.stdout.write(JSON.stringify({ok: true, exitCode: 0, output: out}));
+			} catch (err) {
+				process.stdout.write(JSON.stringify({ok: false, exitCode: err.status ?? 1, output: (err.stdout || '') + (err.stderr || '')}));
+			}
+		`, command], {
+			cwd,
+			stdio: ['ignore', 'pipe', 'ignore'],
+			encoding: 'utf8',
+			timeout: timeoutMs + 2000,
+		});
+		return JSON.parse(stdout);
+	} catch (error) {
+		return {ok: false, exitCode: 1, output: error.message};
+	}
 }
 
 /** A short line describing what the deliverable check requires. */

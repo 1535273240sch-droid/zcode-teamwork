@@ -5,7 +5,12 @@ allowed-tools: Read, Grep, Glob, Bash
 
 Report the current state of the Teamwork campaign in this workspace. **This is a read-only report — change nothing.**
 
-Read whatever exists, and say plainly when something is missing rather than guessing:
+First, run the visual dashboard renderer:
+```bash
+node ${ZCODE_PLUGIN_ROOT}/lib/teamwork-cli.mjs dashboard
+```
+
+If you prefer inspecting raw files, read whatever exists:
 
 - `.teamwork/campaign.json` — the charter
 - `.teamwork/plan.json` — milestones, ownership table

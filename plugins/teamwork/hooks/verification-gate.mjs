@@ -303,7 +303,7 @@ emit({
 		`${listed}${overflow}\n` +
 		'Either close the gaps above, or correct the milestone status. ' +
 		'A verification record needs the milestone name, the verifying role, a recognisable verdict, and a line ' +
-		'"evidence: .teamwork/evidence/<name>.log" citing output the runtime captured - evidence written by the ' +
+		'"evidence: .teamwork/evidence/<name>.log" (or "evidence: latest") citing output the runtime captured - evidence written by the ' +
 		'worker is not evidence. A declared deliverable must be a real file: present, past the size floor, with ' +
 		'body text and no placeholders. A milestone the implementer verified alone does not count.',
 });

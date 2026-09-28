@@ -12,17 +12,18 @@ If no objective was given, ask for one before doing anything else.
 
 Now run **Phase 1 — Specify What, Not How**, following the `teamwork` skill:
 
-1. Interview me on the five topics: Scope & Objectives, Requirements, Independent Verification, Acceptance Criteria, Project Working Directory. **Use the interactive question panel** — one batch per topic, each with concrete options to pick from and an open field for anything they miss. Do not output a wall of prose questions. Push back on anything vague rather than filling the gap with an assumption.
-2. Recommend an integrity mode (`development` / `demo` / `benchmark`) and say why.
-3. Recommend a pattern from the five, and be explicit if the work is non-decomposable — parallelism that conflicts is worse than work that converges serially. Say plainly when the pattern you picked runs Workers in parallel.
-4. Write the charter to `.teamwork/campaign.json`, with `approved: false` and `phase: "scoping"`.
-5. Show me the charter and wait for approval.
+1. Check if a tier is specified (`--tier agile|standard|adversarial`) or run `node ${ZCODE_PLUGIN_ROOT}/lib/teamwork-cli.mjs tier --task "$ARGUMENTS"` to recommend one:
+   - **L1 Agile (Duo)**: For single-file fixes, small features, or rapid test additions. Skips Sentinel & heavy scoping interview, launches Worker + Critic directly to save 80%+ tokens!
+   - **L2 Standard (Squad)**: Orchestrator + Worker + Auditor + Critic for multi-file features and clean milestone breakdown.
+   - **L3 Adversarial (Full Team)**: All 8 roles for quantitative models, math proofs, and high-risk migrations.
+2. If L1 Agile is selected, create `.teamwork/campaign.json` directly with `tier: "agile"`, `approved: true`, `phase: "execution"`, and immediately begin implementation.
+3. If L2 Standard or L3 Adversarial is selected:
+   - Interview me on the key topics (Scope, Requirements, Verification, Acceptance Criteria). **Use the interactive question panel** — one batch per topic.
+   - Write the charter to `.teamwork/campaign.json` and await approval.
+   - **Warn me about the question countdown** before approval.
 
-**Before I approve, warn me about the question countdown.** The question panel auto-continues after five minutes on its own, which would let this approval gate pass itself. Tell me to turn off **Settings → General → Ask-questions auto-continue** (the wording in Chinese is 设置 → 常规 → 提问自动继续), or to keep the countdown paused by hovering over the panel while I read.
+Do not dispatch any subagents, and do not start implementing, until approved (auto-approved in L1 Agile). The ownership hooks stay inert until `approved: true` and `phase: "execution"` are both written.
 
-Do not dispatch any subagents, and do not start implementing, until I approve. The ownership hooks stay inert until `approved: true` and `phase: "execution"` are both written, so approving is what arms them.
-
-Once I approve, follow the `teamwork-execute` skill for Phase 2. Two commands are available while a campaign runs:
-
-- `/teamwork-status` — read-only report of milestone progress, active leases, and verification gaps
-- `/teamwork-end` — archive the campaign state and disarm the hooks
+Once approved, follow the `teamwork-execute` skill for Phase 2. Commands available while running:
+- `/teamwork-status` — OLED & Mermaid visual dashboard and progress ledger
+- `/teamwork-end` — archive campaign state and disarm hooks

@@ -35,6 +35,8 @@ import {resolve} from 'node:path';
 import {TeamworkEngine} from './engine.mjs';
 import {renderHandoff} from './handoff.mjs';
 import {describeIsolation} from './isolation.mjs';
+import {renderDashboard} from './dashboard.mjs';
+import {recommendTier} from './router.mjs';
 
 function out(text) {
 	process.stdout.write(`${text}\n`);
@@ -306,6 +308,28 @@ switch (command) {
 			if (!r.ok) return out(`Refused: ${r.reason}`);
 			out(`Dispatches used: ${r.used} of ${r.budget}`);
 			out(r.shouldPrepare ? `A briefing should be written: ${r.reason}` : 'No briefing needed yet.');
+		});
+		break;
+	}
+
+	case 'dashboard': {
+		const campaign = engine.load();
+		const status = engine.status();
+		const rendered = renderDashboard(campaign, {dispatchesCount: status?.dispatches ?? 0});
+		out(rendered);
+		process.exit(0);
+	}
+
+	case 'tier': {
+		const text = args.task ?? args.objective;
+		const files = args.files ? String(args.files).split(',') : [];
+		const result = recommendTier({objective: text, affectedFiles: files});
+		emit(result, args, (r) => {
+			out(`Recommended Tier: ${r.tier.toUpperCase()} (${r.config.title})`);
+			out(`Summary: ${r.config.summary}`);
+			out('Reasons:');
+			for (const reason of r.reasons) out(`  - ${reason}`);
+			out(`Active Roles: ${r.config.activeRoles.join(', ')}`);
 		});
 		break;
 	}
