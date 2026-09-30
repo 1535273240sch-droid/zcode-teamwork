@@ -25,7 +25,7 @@ Confirm all four, and stop if any is missing:
 
 Run one milestone through these five steps, then take the next one the dependency graph has unblocked.
 
-**1. Dispatch.** Send the milestone to a Worker with its file scope and its acceptance criteria. Dispatch Workers in parallel **only** where the ownership table gives them disjoint files. A milestone whose `blocked_by` is not yet done does not start.
+**1. Dispatch.** Send the milestone to a Worker with its file scope and its acceptance criteria. Dispatch Workers in parallel **only** where the ownership table gives them disjoint files. A milestone whose `blocked_by` is not yet done does not start. Name the dispatch after the person, not the ID: the card title is `owner名片：title` (e.g. "约翰·卡马克 · 实现攻坚：把 desc 接口接进采集器"), and in conversation a milestone is referred to as `title（id）`. Verification filenames keep using the bare `id` — the persona lives in prose, never in file paths.
 
 **2. Implement.** The Worker changes only its own files, using the `Edit` and `Write` tools, and reports what changed, the exact verification command, and its raw output. A Worker that needs a file outside its scope stops and reports a conflict instead of taking it.
 
