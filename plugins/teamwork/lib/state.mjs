@@ -127,6 +127,8 @@ export function createMilestone(input) {
 	const status = MILESTONE_STATUSES.includes(input?.status) ? input.status : 'pending';
 	return {
 		id,
+		title: typeof input?.title === 'string' ? input.title : '',
+		owner: typeof input?.owner === 'string' ? input.owner : '',
 		deliverable: typeof input?.deliverable === 'string' ? input.deliverable : '',
 		status,
 		owner_role: typeof input?.owner_role === 'string' ? input.owner_role : 'worker',

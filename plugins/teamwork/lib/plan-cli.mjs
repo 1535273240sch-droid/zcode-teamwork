@@ -127,8 +127,8 @@ if (command === 'draft') {
 	process.stdout.write(`Draft milestone list for: ${objective}\n`);
 	process.stdout.write(`Workspace files considered: ${result.workspace_file_count}\n\n`);
 	for (const m of result.milestones) {
-		process.stdout.write(`  [${m.id}] ${m.deliverable}\n`);
-		process.stdout.write(`      owner: ${m.owner_role}   verified by: ${m.verified_by}\n`);
+		process.stdout.write(`  [${m.id}] ${m.title ? `${m.title} — ` : ''}${m.deliverable}\n`);
+		process.stdout.write(`      owner: ${m.owner ? `${m.owner}   role: ` : ''}${m.owner_role}   verified by: ${m.verified_by}\n`);
 		process.stdout.write(`      acceptance: ${m.acceptance}\n`);
 		if (m.blocked_by.length > 0) process.stdout.write(`      blocked by: ${m.blocked_by.join(', ')}\n`);
 		process.stdout.write('\n');

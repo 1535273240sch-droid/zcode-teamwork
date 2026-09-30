@@ -26,6 +26,7 @@ const WORK_KINDS = [
 	{
 		id: 'survey',
 		match: /(refactor|migrat|rewrite|replace|upgrad|port |convert|redesign|architect)/i,
+		title: 'Survey: map every file and call site',
 		deliverable: 'Written survey of every call site and file the objective touches, with counts',
 		acceptance: 'Survey names each file and the number of call sites, produced by reading the code rather than by memory',
 		owner: 'explorer',
@@ -35,6 +36,7 @@ const WORK_KINDS = [
 	{
 		id: 'implementation',
 		match: /./,
+		title: 'Implement the objective change',
 		deliverable: 'The change the objective describes, implemented inside the assigned file scope',
 		acceptance: 'The objective is demonstrable by running a command whose raw output is written into the verification record',
 		owner: 'worker',
@@ -44,6 +46,7 @@ const WORK_KINDS = [
 	{
 		id: 'tests',
 		match: /(test|coverage|spec|bug|fix|behaviou?r|regress)/i,
+		title: 'Tests: fail first, then pass',
 		deliverable: 'Tests that fail before the change and pass after it',
 		acceptance: 'Each new test is shown failing on the pre-change revision and passing after, with both outputs recorded',
 		owner: 'worker',
@@ -53,6 +56,7 @@ const WORK_KINDS = [
 	{
 		id: 'docs',
 		match: /(doc|readme|comment|changelog|api reference)/i,
+		title: 'Docs: match the new behaviour',
 		deliverable: 'Documentation updated to match the new behaviour',
 		acceptance: 'Every command and path named in the documentation exists and was run',
 		owner: 'worker',
@@ -135,6 +139,7 @@ export function decompose(objective, options = {}) {
 		const id = kind.id;
 		const milestone = {
 			id,
+			title: kind.title,
 			deliverable: kind.deliverable,
 			status: 'pending',
 			owner_role: kind.owner,

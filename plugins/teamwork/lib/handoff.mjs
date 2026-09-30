@@ -171,8 +171,8 @@ export function renderHandoff(handoff) {
 		`Open milestones (${handoff.openMilestones.length}):`,
 	];
 	for (const m of handoff.openMilestones) {
-		lines.push(`  [${m.id}] ${m.status} - ${m.deliverable}`);
-		lines.push(`        owner: ${m.owner_role}   verifier: ${m.verified_by}`);
+		lines.push(`  [${m.id}] ${m.title ? `${m.title} — ` : ''}${m.status} - ${m.deliverable}`);
+		lines.push(`        owner: ${m.owner ? `${m.owner}   role: ` : ''}${m.owner_role}   verifier: ${m.verified_by}`);
 		if (m.files.length > 0) lines.push(`        files: ${m.files.join(', ')}`);
 	}
 	if (handoff.liveLeases.length > 0) {
@@ -243,11 +243,11 @@ export function renderBriefing(input) {
 			lines.push('None. The campaign is ready for final verification.', '');
 		} else {
 			for (const m of open) {
-				lines.push(`### ${m.id}`, '');
+				lines.push(`### ${m.title ? `${m.title} (${m.id})` : m.id}`, '');
 				lines.push(`- Status: ${m.status}`);
 				lines.push(`- Deliverable: ${m.deliverable}`);
 				lines.push(`- Acceptance: ${m.acceptance}`);
-				lines.push(`- Owner: ${m.owner_role}   Verifier: ${m.verified_by}`);
+				lines.push(`- Owner: ${m.owner ? `${m.owner} | role: ` : ''}${m.owner_role}   Verifier: ${m.verified_by}`);
 				if ((m.files ?? []).length > 0) lines.push(`- Files: ${m.files.join(', ')}`);
 				if ((m.blocked_by ?? []).length > 0) lines.push(`- Blocked by: ${m.blocked_by.join(', ')}`);
 				lines.push('');
