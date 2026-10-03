@@ -135,19 +135,20 @@ export class TeamworkEngine {
 		const reqPath = join(this.cwd, 'ORIGINAL_REQUEST.md');
 		const nowStr = new Date().toISOString();
 		const entry = [
-			`\n## Request at ${nowStr}`,
-			`- **Objective**: ${objective}`,
-			meta.mode ? `- **Mode**: ${meta.mode}` : null,
-			meta.pattern ? `- **Pattern**: ${meta.pattern}` : null,
+			`\n## 用户请求记录于 ${nowStr}`,
+			`- **核心目标 (Objective)**: ${objective}`,
+			meta.mode ? `- **运行模式 (Mode)**: ${meta.mode}` : null,
+			meta.pattern ? `- **战役模式 (Pattern)**: ${meta.pattern}` : null,
 			'',
 		].filter(Boolean).join('\n');
 
 		if (!existsSync(reqPath)) {
 			const header = [
-				'# ORIGINAL_REQUEST (Ground Truth)',
+				'# ORIGINAL_REQUEST (Ground Truth) - 用户原始意图绝对真理源',
 				'',
-				'This file is an append-only authoritative record of the user\'s original requests.',
-				'It serves as the final ground truth across all agent generations and compaction boundaries.',
+				'本文件是用户原始意图与需求任务的「只增不减（Append-Only）」绝对权威凭证。',
+				'作为跨越所有智能体世代更迭、上下文窗口压缩截断与会话重启的终极真理源（Ground Truth）。',
+				'任何阶段的终审验收（Victory Audit）均必须直接对照本文件的原始承诺逐条复核。',
 				'',
 			].join('\n');
 			writeFileSync(reqPath, header + entry, 'utf8');

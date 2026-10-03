@@ -8,37 +8,37 @@ to offer an update. Bump both, or installed users will never be told there is a 
 
 ## [0.5.0] — 2026-10-03
 
-100% Google Antigravity Teamwork Alignment: Active Sentinel Watchdog, Self-Succession Protocol, 11-Role Matrix, 5 Specialized Routing Paths, Shared Blackboard Architecture, and Append-Only Ground Truth.
+100% 深度对齐 Google Antigravity 多智能体协同编排引擎：引入主动存活看门狗与死锁自愈机制、长程会话自我继承协议与永久退役铁律、11 大特种特工矩阵、5 大专业化路由路径、中心黑板架构以及只增不减绝对意图权威记录。
 
-### Added
+### 新增特性 (Added)
 
-- **Active Sentinel Watchdog & Deadlock Auto-healing (`plugins/teamwork/lib/watchdog.mjs`, `scripts/watchdog.mjs`)**:
-  - Implements Antigravity's dual Sentinel monitoring Crons natively in zero-dependency Node.js.
-  - Actively inspects `events.jsonl` activity, expired file leases, and abandoned subagent reservations.
-  - Automatically heals deadlocked conditions by pruning expired ownership entries and stale reservations.
-  - Terminal runner with daemon background mode (`npm run watchdog`).
-- **Self-Succession Protocol & Permanent Retirement (`plugins/teamwork/lib/handoff.mjs`, `lib/engine.mjs`)**:
-  - Implements Antigravity's Iron Rule: outgoing generations are permanently retired (`retired: true`) upon handoff to prevent context pollution and hallucination drift.
-  - Generates immutable handoff archives in `.teamwork/handoffs/gen-<N>.json` and outputs actionable `BRIEFING.md`.
-  - Maintains `generations.json` registry tracking lineage from `gen-1` to `gen-<N+1>`.
-- **11-Role Specialized Agent Matrix (`agents/test-writer.md`, `agents/spec-miner.md`, `agents/empirical-challenger.md`)**:
-  - Expanded from 8 roles to full 11-role roster.
-  - `test-writer`: dedicated, independent test authoring (tests only, zero production code editing) to eliminate implementer self-catering.
-  - `spec-miner`: read-only extraction of authoritative contracts from RFCs, protos, headers, and schemas.
-  - `empirical-challenger`: adversarial chaos testing and fuzzing to break worker assumptions with empirical counterexamples.
-- **5 Specialized Antigravity Routing Paths (`plugins/teamwork/lib/router.mjs`)**:
-  - `swe-light`: Single-file / self-contained modification with strict anti-decomposition rule and tight implementer-reviewer loop.
-  - `general`: Standard repository-scale multi-module DAG engineering.
-  - `document-review`: Recursive self-aggregation (RSA) tournament tree review for papers, RFCs, and markdown specifications.
-  - `math-proof`: Colosseum multistage verification for theorems and deductive logic.
-  - `adversarial-quant`: Full 11-role adversarial defense for quantitative models, security exploits, and red-team fuzzing.
-- **Shared Blackboard Architecture (`plugins/teamwork/lib/blackboard.mjs`)**:
-  - Introduces `.teamwork/blackboard.json` central state board to serialize concurrent agent submissions.
-  - Atomic key-value publishing (`postUpdate`), audit log tracking, and category-filtered querying (`queryBlackboard`).
-- **Append-Only Ground Truth (`ORIGINAL_REQUEST.md`)**:
-  - Automatically maintained at workspace root as the unalterable reference of original user requests, immune to context compactions or session restarts.
-- **Full Alignment Test Suite (`tests/antigravity-alignment.test.mjs`)**:
-  - 37 new assertions validating watchdog healing, succession lineage, routing paths, role frontmatter, blackboard synchronization, and ground truth persistence.
+- **主动存活检测与死锁自愈看门狗 (`plugins/teamwork/lib/watchdog.mjs`, `scripts/watchdog.mjs`)**：
+  - 原生零依赖对齐 Antigravity 哨兵监控守护机制（Sentinel Monitoring Crons）。
+  - 主动巡检 `events.jsonl` 事件流 mtime、过期文件租约锁（Lease）以及未核销的子代理预留令牌（Reservations）。
+  - 自动解除死锁（Auto-Heal）：自动清理过期文件租约，安全回收超时挂死的孤立子代理预留，彻底化解异常掉线造成的资源锁死。
+  - 提供全功能终端运行器，支持一次性巡检与后台守护模式（`npm run watchdog`）。
+- **自我继承协议与永久退役铁律 (`plugins/teamwork/lib/handoff.mjs`, `lib/engine.mjs`)**：
+  - 严格落实 Antigravity 核心铁律：交接后旧代实例**永久退役（Permanently Retired - 禁止复用）**，从物理上杜绝历史上下文累积污染与幻觉漂移。
+  - 自动归档不可篡改的交接记录到 `.teamwork/handoffs/gen-<N>.json` 并输出即时可读的 `BRIEFING.md`。
+  - 在 `generations.json` 中完整记录从 `gen-1` 至 `gen-<N+1>` 的多代世代谱系。
+- **11 大专业化特种特工全武装矩阵 (`agents/test-writer.md`, `agents/spec-miner.md`, `agents/empirical-challenger.md`)**：
+  - 角色库由 8 角色扩充为 11 角色全武装矩阵。
+  - `test-writer`（独立测试编写者）：专职独立编写全量自动化测试与极端边界用例，严禁修改任何生产业务代码，彻底消除实现者“自我迎合、自我造假”的盲区。
+  - `spec-miner`（规范挖掘者）：严格只读，专门从代码库内的头文件、Proto、接口定义、RFC 文档或架构设计中逆向提取权威契约与不变量。
+  - `empirical-challenger`（经验对抗者与模糊红队）：构造模糊测试（Fuzzing）、反例生成器与极限破坏测试，用客观事实攻击 Worker 代码，一票否决虚假完成。
+- **5 大 Antigravity 专业化路由路径 (`plugins/teamwork/lib/router.mjs`)**：
+  - `swe-light`（轻量快修）：单文件快速修复。严格遵循**反拆分铁律（Does NOT decompose）**，单一实现者配合审校者快速闭环，节省 80%+ Token。
+  - `general`（标准软件工程）：常规大型软件工程与跨模块重构，里程碑拓扑拆解，配备独立测试编写者。
+  - `document-review`（文档与规范评审）：论文、RFC 与规范文档评审，基于递归自聚合（RSA）锦标赛树进行并行分段审校。
+  - `math-proof`（数学与形式化证明）：数学定理推导与形式化证明，Colosseum 多阶段流水线严格查验逻辑漏洞。
+  - `adversarial-quant`（量化金融与极限红队）：量化模型、金融 Alpha 挖掘、红队安全、共识算法等极端高敏场景，激活全部 11 角色武装。
+- **专职中心黑板架构 (`plugins/teamwork/lib/blackboard.mjs`)**：
+  - 引入 `.teamwork/blackboard.json` 作为集中共享状态黑板，各特工仅提交状态更新与接口摘要。
+  - 提供原子合并写入（`postUpdate`）、审计追踪留痕与分类筛选检索（`queryBlackboard`），彻底根除多 Agent 并发写入冲突。
+- **只增不减绝对意图权威记录 (`ORIGINAL_REQUEST.md`)**：
+  - 自动在项目根目录维护 **Append-Only（只增不减）** 的人类原始需求记录与 UTC 时间戳，作为不受上下文压缩截断影响的**终极真理源（Ground Truth）**，收尾验收必须以此为基准进行实质审查。
+- **全量对齐测试套件 (`tests/antigravity-alignment.test.mjs`)**：
+  - 新增 37 个严格断言，全量覆盖看门狗自愈、自我继承谱系、5 大专业化路由、特工 Frontmatter 契约、黑板原子同步与意图真理源落盘。
 
 ## [0.4.1] — 2026-09-29
 

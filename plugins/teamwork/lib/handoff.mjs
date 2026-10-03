@@ -364,7 +364,7 @@ export function executeSuccession(input = {}) {
 		retired: true,
 		briefingPath: briefingFile,
 		handoffPath: genFile,
-		instruction: `Generation ${currentGenId} is permanently retired. Successor ${nextGenId} must resume from BRIEFING.md.`,
+		instruction: `当前代 ${currentGenId} 已永久退役（Permanently Retired），严禁复用。后继世代 ${nextGenId} 必须从 BRIEFING.md 状态继续推进。`,
 	};
 }
 
