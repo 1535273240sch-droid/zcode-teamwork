@@ -27,6 +27,7 @@ import {readFileSync, existsSync, statSync, readdirSync} from 'node:fs';
 import {join} from 'node:path';
 
 import {readStdin, statePaths, loadCampaign, loadMilestones, isCampaignActive, VERIFICATIONS_DIR, resolveProjectDir} from './_lib.mjs';
+import {inspectHealth, healHealth} from '../lib/watchdog.mjs';
 
 // Silence that is worth mentioning. Deliberately generous: a Worker running a long
 // build or a full test suite is not stalled, and crying wolf on every quiet minute
@@ -123,6 +124,22 @@ if (milestones.length > 0 && records.length === 0) {
 			'The verification gate blocks the end of the turn until each completed milestone has one, ' +
 			'so writing them as work finishes is cheaper than writing them all at the end.',
 	);
+}
+
+// Active Watchdog auto-heal: heal expired leases or deadlocked reservations
+try {
+	const health = inspectHealth({cwd, stateDir: paths.stateDir});
+	if (health.status === 'deadlocked' || health.expiredLeases?.length > 0 || health.abandonedReservations?.length > 0) {
+		const healResult = healHealth({cwd, stateDir: paths.stateDir});
+		if (healResult.healed) {
+			notes.push(
+				`Teamwork Sentinel Watchdog: auto-healed deadlocks (pruned ${healResult.prunedLeases?.length ?? 0} expired lease(s), ` +
+				`${healResult.prunedReservations?.length ?? 0} abandoned reservation(s)).`,
+			);
+		}
+	}
+} catch {
+	// Watchdog failures must never crash prompt submission
 }
 
 if (notes.length === 0) emit({});

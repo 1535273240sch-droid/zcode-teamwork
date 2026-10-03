@@ -6,6 +6,40 @@ The version lives in **two** places and they must stay in sync: `plugins/teamwor
 is the installed version, and `marketplace.json` is the version the client compares against to decide whether
 to offer an update. Bump both, or installed users will never be told there is a new one.
 
+## [0.5.0] — 2026-10-03
+
+100% Google Antigravity Teamwork Alignment: Active Sentinel Watchdog, Self-Succession Protocol, 11-Role Matrix, 5 Specialized Routing Paths, Shared Blackboard Architecture, and Append-Only Ground Truth.
+
+### Added
+
+- **Active Sentinel Watchdog & Deadlock Auto-healing (`plugins/teamwork/lib/watchdog.mjs`, `scripts/watchdog.mjs`)**:
+  - Implements Antigravity's dual Sentinel monitoring Crons natively in zero-dependency Node.js.
+  - Actively inspects `events.jsonl` activity, expired file leases, and abandoned subagent reservations.
+  - Automatically heals deadlocked conditions by pruning expired ownership entries and stale reservations.
+  - Terminal runner with daemon background mode (`npm run watchdog`).
+- **Self-Succession Protocol & Permanent Retirement (`plugins/teamwork/lib/handoff.mjs`, `lib/engine.mjs`)**:
+  - Implements Antigravity's Iron Rule: outgoing generations are permanently retired (`retired: true`) upon handoff to prevent context pollution and hallucination drift.
+  - Generates immutable handoff archives in `.teamwork/handoffs/gen-<N>.json` and outputs actionable `BRIEFING.md`.
+  - Maintains `generations.json` registry tracking lineage from `gen-1` to `gen-<N+1>`.
+- **11-Role Specialized Agent Matrix (`agents/test-writer.md`, `agents/spec-miner.md`, `agents/empirical-challenger.md`)**:
+  - Expanded from 8 roles to full 11-role roster.
+  - `test-writer`: dedicated, independent test authoring (tests only, zero production code editing) to eliminate implementer self-catering.
+  - `spec-miner`: read-only extraction of authoritative contracts from RFCs, protos, headers, and schemas.
+  - `empirical-challenger`: adversarial chaos testing and fuzzing to break worker assumptions with empirical counterexamples.
+- **5 Specialized Antigravity Routing Paths (`plugins/teamwork/lib/router.mjs`)**:
+  - `swe-light`: Single-file / self-contained modification with strict anti-decomposition rule and tight implementer-reviewer loop.
+  - `general`: Standard repository-scale multi-module DAG engineering.
+  - `document-review`: Recursive self-aggregation (RSA) tournament tree review for papers, RFCs, and markdown specifications.
+  - `math-proof`: Colosseum multistage verification for theorems and deductive logic.
+  - `adversarial-quant`: Full 11-role adversarial defense for quantitative models, security exploits, and red-team fuzzing.
+- **Shared Blackboard Architecture (`plugins/teamwork/lib/blackboard.mjs`)**:
+  - Introduces `.teamwork/blackboard.json` central state board to serialize concurrent agent submissions.
+  - Atomic key-value publishing (`postUpdate`), audit log tracking, and category-filtered querying (`queryBlackboard`).
+- **Append-Only Ground Truth (`ORIGINAL_REQUEST.md`)**:
+  - Automatically maintained at workspace root as the unalterable reference of original user requests, immune to context compactions or session restarts.
+- **Full Alignment Test Suite (`tests/antigravity-alignment.test.mjs`)**:
+  - 37 new assertions validating watchdog healing, succession lineage, routing paths, role frontmatter, blackboard synchronization, and ground truth persistence.
+
 ## [0.4.1] — 2026-09-29
 
 Universal Cross-Platform One-Click Setup, Dynamic Hook Auto-Registration, Live Black Terminal Monitor, and Safe Status Handling.

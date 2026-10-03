@@ -22,7 +22,9 @@ const HOME = os.homedir();
 const ZCODE_DIR = path.join(HOME, '.zcode');
 const ZCODE_CLI_DIR = path.join(ZCODE_DIR, 'cli');
 const ZCODE_CONFIG_FILE = path.join(ZCODE_CLI_DIR, 'config.json');
-const PLUGIN_TARGET_DIR = path.join(ZCODE_CLI_DIR, 'plugins', 'cache', 'zcode-plugins-official', 'teamwork', '0.4.0');
+const pkg = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8'));
+const VERSION = pkg.version || '0.5.0';
+const PLUGIN_TARGET_DIR = path.join(ZCODE_CLI_DIR, 'plugins', 'cache', 'zcode-plugins-official', 'teamwork', VERSION);
 
 console.log('\n🌌 ========================================================');
 console.log('   TEAMWORK FOR ZCODE — Universal Zero-Config Installer   ');

@@ -19,7 +19,7 @@
 import {INTEGRITY_MODES} from './state.mjs';
 
 /** Roles that may render a verdict. Anything else is not a verifier. */
-export const VERIFIER_ROLES = ['critic', 'challenger', 'auditor', 'success-auditor', 'sentinel'];
+export const VERIFIER_ROLES = ['critic', 'challenger', 'auditor', 'success-auditor', 'sentinel', 'empirical-challenger'];
 
 /** Verdict tokens a record may carry. Kept in sync with the execute skill. */
 export const VERDICTS = [

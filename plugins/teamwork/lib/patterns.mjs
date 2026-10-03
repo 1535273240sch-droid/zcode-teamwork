@@ -34,6 +34,9 @@ export const PATTERN_ROLES = [
 	'challenger',
 	'auditor',
 	'success-auditor',
+	'test-writer',
+	'spec-miner',
+	'empirical-challenger',
 ];
 
 export const PATTERN_IDS = [

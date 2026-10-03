@@ -5,15 +5,16 @@
     {
       "name": "teamwork",
       "source": "./plugins/teamwork",
-      "description": "Collaborative multi-agent team: scoping interview, role roster, exclusive file ownership enforced for both editor and shell writes, file-backed verification, and verification-driven convergence.",
-      "version": "0.4.1",
+      "description": "Collaborative multi-agent team aligned with Google Antigravity Teamwork: eleven roles, active watchdog deadlock auto-healing, self-succession protocol, shared blackboard, five specialized routing paths, exclusive file ownership, and verification-driven convergence.",
+      "version": "0.5.0",
       "category": "Developer Tools",
       "tags": [
         "multi-agent",
         "orchestration",
         "long-horizon",
         "verification",
-        "research"
+        "antigravity",
+        "watchdog"
       ]
     },
     {

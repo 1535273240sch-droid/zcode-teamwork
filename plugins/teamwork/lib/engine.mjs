@@ -18,7 +18,8 @@
 //
 // State access goes through state.mjs; this module never writes files directly.
 //
-// ASCII only: protocol artifact.
+import {existsSync, writeFileSync, appendFileSync} from 'node:fs';
+import {join} from 'node:path';
 
 import {
 	STATE_VERSION,
@@ -45,9 +46,10 @@ import {schedule, DEFAULT_SPAWN_BUDGET, resolveSpawnBudget} from './scheduler.mj
 import {decideVerifiers, scopedPrompts, judgeGate, createRepairWorkstream} from './verification.mjs';
 import {claim, release, checkWrite, findCollisions, expiredEntries} from './ownership.mjs';
 import {createEvent, appendEvent, summarize} from './journal.mjs';
-import {assessFromPaths, buildHandoff, renderHandoff, renderBriefing, shouldPrepareSuccession} from './handoff.mjs';
+import {assessFromPaths, buildHandoff, renderHandoff, renderBriefing, shouldPrepareSuccession, executeSuccession, isGenerationRetired} from './handoff.mjs';
 import {loadPattern, listPatterns, suggestPattern, checkPlanAgainstPattern, describePattern} from './patterns.mjs';
 import {createIsolation, describeIsolation, checkRoleWrite, chooseMode} from './isolation.mjs';
+import {postUpdate as postToBlackboard, readBlackboard, queryBlackboard} from './blackboard.mjs';
 
 /**
  * A campaign's control surface.
@@ -123,8 +125,35 @@ export class TeamworkEngine {
 			if (!loaded.ok) return loaded;
 		}
 		const saved = this.save(state);
+		this.recordOriginalRequest(saved.objective, {mode: saved.mode, pattern: saved.pattern});
 		this.log('campaign-created', {objective: saved.objective, mode: saved.mode, pattern: saved.pattern, replaced: existing !== null});
 		return {ok: true, state: saved};
+	}
+
+	/** Record user intent into append-only ORIGINAL_REQUEST.md ground truth file. */
+	recordOriginalRequest(objective, meta = {}) {
+		const reqPath = join(this.cwd, 'ORIGINAL_REQUEST.md');
+		const nowStr = new Date().toISOString();
+		const entry = [
+			`\n## Request at ${nowStr}`,
+			`- **Objective**: ${objective}`,
+			meta.mode ? `- **Mode**: ${meta.mode}` : null,
+			meta.pattern ? `- **Pattern**: ${meta.pattern}` : null,
+			'',
+		].filter(Boolean).join('\n');
+
+		if (!existsSync(reqPath)) {
+			const header = [
+				'# ORIGINAL_REQUEST (Ground Truth)',
+				'',
+				'This file is an append-only authoritative record of the user\'s original requests.',
+				'It serves as the final ground truth across all agent generations and compaction boundaries.',
+				'',
+			].join('\n');
+			writeFileSync(reqPath, header + entry, 'utf8');
+		} else {
+			appendFileSync(reqPath, entry, 'utf8');
+		}
 	}
 
 	/** Mark the charter approved and move into execution. Requires at least one milestone. */
@@ -485,6 +514,25 @@ export class TeamworkEngine {
 		return checkRoleWrite(role, isolation);
 	}
 
+	// -- blackboard --------------------------------------------------------
+
+	/** Post an atomic state update to the central blackboard. */
+	postBlackboard(update, options = {}) {
+		const res = postToBlackboard(this.stateDir, update, options);
+		if (res.ok) {
+			this.log('blackboard-updated', {author: options.author ?? 'worker', keys: res.updatedKeys});
+		}
+		return res;
+	}
+
+	/** Read or query entries from the central blackboard. */
+	getBlackboard(filter = {}) {
+		if (filter.category || filter.prefix) {
+			return queryBlackboard(this.stateDir, filter);
+		}
+		return {ok: true, blackboard: readBlackboard(this.stateDir)};
+	}
+
 	// -- continuity --------------------------------------------------------
 
 	/**
@@ -544,6 +592,28 @@ export class TeamworkEngine {
 
 	renderHandoff(reason) {
 		return renderHandoff(this.handoff(reason));
+	}
+
+	/** Execute self-succession protocol, retiring current generation and arming the successor. */
+	executeSuccession(reason, options = {}) {
+		const state = this.load();
+		if (!state) return {ok: false, reason: 'no campaign'};
+		const generation = options.generation ?? (state.generation ?? 1);
+		const result = executeSuccession({
+			state,
+			stateDir: this.stateDir,
+			generation,
+			reason: reason ?? 'succession-triggered',
+			now: options.now ?? Date.now(),
+		});
+		if (result.ok) {
+			this.log('succession-executed', {current: result.currentGeneration, next: result.nextGeneration, reason});
+		}
+		return result;
+	}
+
+	isGenerationRetired(genId) {
+		return isGenerationRetired(genId, this.stateDir);
 	}
 
 	// -- reporting ---------------------------------------------------------

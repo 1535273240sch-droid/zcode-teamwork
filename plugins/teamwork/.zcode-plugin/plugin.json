@@ -1,7 +1,7 @@
 {
   "name": "teamwork",
-  "version": "0.4.1",
-  "description": "Collaborative multi-agent team for repo-scale migrations, simulation, and deep research. Scoping interview, eight roles, exclusive file ownership enforced for both editor and shell writes, and file-backed verification. Pairs with Goal Mode for convergence.",
+  "version": "0.5.0",
+  "description": "Collaborative multi-agent team aligned with Google Antigravity Teamwork: eleven roles, active watchdog deadlock auto-healing, self-succession protocol, shared blackboard, five specialized routing paths, exclusive file ownership, and verification-driven convergence.",
   "author": {
     "name": "Teamwork for ZCode"
   },
@@ -13,7 +13,9 @@
     "orchestration",
     "long-horizon",
     "verification",
-    "file-ownership"
+    "file-ownership",
+    "antigravity",
+    "watchdog"
   ],
   "commands": "commands",
   "skills": "skills",

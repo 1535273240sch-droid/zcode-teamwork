@@ -1,11 +1,11 @@
-# Teamwork for ZCode (v0.4.0)
+# Teamwork for ZCode (v0.5.0)
 
-> **100% 对齐 Google Antigravity 多智能体协同编排引擎**  
-> 模型的「我做完了」从来不算证据。Teamwork 将工程验证、角色协作与交付质量转化为 OS 进程级物理硬约束。
+> **100% 完整对齐 Google Antigravity 多智能体协同编排引擎**  
+> 模型的「我做完了」从来不算证据。Teamwork 将工程验证、角色协作、死锁自愈与交付质量转化为 OS 进程级物理硬约束。
 
-[![Version](https://img.shields.io/badge/version-0.4.0-brightgreen.svg)](package.json)
+[![Version](https://img.shields.io/badge/version-0.5.0-brightgreen.svg)](package.json)
 [![Antigravity Alignment](https://img.shields.io/badge/Google%20Antigravity-100%25%20Aligned-00F5A0.svg)](#)
-[![Tests](https://img.shields.io/badge/tests-932%20passed-success.svg)](#)
+[![Tests](https://img.shields.io/badge/tests-969%2B%20passed-success.svg)](#)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-blue.svg)](#)
 [![License](https://img.shields.io/badge/license-MIT-purple.svg)](LICENSE)
 
@@ -13,101 +13,141 @@
 
 ## 🌟 为什么需要 Teamwork？
 
-在复杂软件开发任务中，单智能体往往面临上下文膨胀、幻觉蔓延、假装完成、自圆其说等固有瓶颈：
+在长程与复杂软件工程任务中，传统多智能体框架往往面临上下文膨胀、幻觉蔓延、假装完成、自圆其说等固有瓶颈：
 
 - **口头宣布完成**：模型在对话中言之凿凿「已修复并通过全部测试」，但实际上根本没有运行测试或提交代码。
-- **作弊与桩文件**：模型可能为了通过简单校验而生成空占位函数、伪造测试日志，甚至伪造虚假可执行命令。
-- **越界破坏与上下文踩踏**：多步执行过程中，未加保护的核心模块或外部配置文件被意料之外地修改。
+- **作弊与假桩文件**：模型可能为了通过简单校验而生成空占位函数、编造终端输出日志，甚至伪造虚假可执行命令（如实测记录中现场编译伪造的 `git.exe` 假桩）。
+- **越界破坏与并发踩踏**：多个 Worker 并行修改相同文件导致代码覆盖、Git 冲突与逻辑损坏（TOCTOU 竞态）。
+- **失联 Worker 静默假成功**：上游网络中断或超时切断导致子代理挂死，系统却误以为全盘通过。
 
 **Teamwork 彻底终结了这些问题。**  
-它不是一段祈求模型遵守纪律的“提示词”（Prompt），而是基于 **ZCode 钩子机制与 OS 子进程物理约束** 构建的编排内核——**只要物理世界中没有生成真正的验证凭证，模型哪怕说得天花乱坠，收尾操作也必将被进程级拦截拉回**。
+它不是一段祈求模型自觉遵守纪律的软性提示词（Prompt），而是基于 **ZCode 钩子机制与 OS 子进程物理硬约束** 构建的分布式协同内核——**只要物理世界中没有生成真正的验证凭证与实机物证，模型哪怕说得天花乱坠，收尾操作也必将被进程级拦截拉回**。
 
 ---
 
-## 🚀 v0.4.0 核心演进与架构对齐
+## 🚀 v0.5.0 核心演进：全面对齐 Google Antigravity
 
-在最新 **v0.4.0** 中，Teamwork 实现了与 **Google Antigravity 智能体协同编排规范** 的 100% 完整对齐：
+在 **v0.5.0** 中，Teamwork 实现了与 **Google Antigravity Teamwork 内置架构** 的全维度深度对齐：
 
 ```
-                              ┌──────────────────────────┐
-                              │     User Requirement     │
-                              └─────────────┬────────────┘
-                                            │
-                                  [ Tiered Router ]
-                                            │
-                 ┌──────────────────────────┼──────────────────────────┐
-                 ▼                          ▼                          ▼
-          ┌──────────────┐          ┌──────────────┐          ┌──────────────┐
-          │   Tier 1     │          │   Tier 2     │          │   Tier 3     │
-          │  Agile Duo   │          │Standard Squad│          │Adversarial L3│
-          └──────┬───────┘          └──────┬───────┘          └──────┬───────┘
-                 │                         │                         │
-            Worker+Critic           Lead+Worker+Critic        Lead+Worker+Critic
-                 │                         │                  +Architect (Red)
-                 └─────────────────────────┼─────────────────────────┘
-                                           │
-                                           ▼
-                    ┌──────────────────────────────────────────────┐
-                    │          Physical Evidence Engine            │
-                    │   • Real-Command Re-verification (Anti-Fake) │
-                    │   • Adaptive Payload Sizing (Min 64 Bytes)   │
-                    │   • Dynamic 'latest' Evidence Resolution     │
-                    │   • Exclusive File Locking Protection        │
-                    └──────────────────────┬───────────────────────┘
-                                           │
-                                           ▼
-                    ┌──────────────────────────────────────────────┐
-                    │      Liquid Glass Real-time Dashboard        │
-                    │      Mermaid DAG + Budget & Token Ledger     │
-                    └──────────────────────────────────────────────┘
+                    ┌──────────────────────────────┐
+                    │       User Interaction       │
+                    └──────────────┬───────────────┘
+                                   │ /teamwork
+                                   ▼
+                    ┌──────────────────────────────┐
+                    │       PROJECT SENTINEL       │
+                    │  • ORIGINAL_REQUEST.md (🔒)   │
+                    │  • Active Watchdog Daemon    │
+                    │  • Deadlock Auto-Healing     │
+                    └──────────────┬───────────────┘
+                                   │ Specialized Routing
+         ┌─────────────────────────┼─────────────────────────┐
+         ▼                         ▼                         ▼
+┌──────────────────┐      ┌──────────────────┐      ┌──────────────────┐
+│    SWE Light     │      │     General      │      │ Document Review  │
+│ (Anti-decompose) │      │   Orchestrator   │      │  (RSA Tree DAG)  │
+└────────┬─────────┘      └────────┬─────────┘      └────────┬─────────┘
+         │                         │                         │
+         │ Single Line             │ Stage DAG / Blackboard  │ Tournament Tree
+         ▼                         ▼                         ▼
+┌──────────────────┐      ┌──────────────────┐      ┌──────────────────┐
+│ Worker ── Critic │      │ Worker / Test-W  │      │ Segment Analysts │
+│                  │      │ Spec-M / Chall   │      │ Synthesizer      │
+└──────────────────┘      └────────┬─────────┘      └──────────────────┘
+                                   │
+                                   ▼
+                    ┌──────────────────────────────┐
+                    │    Physical Evidence & Gate  │
+                    │  • File Ownership Lock       │
+                    │  • reverifyCommand (Sandbox) │
+                    │  • Self-Succession (_gen<N>) │
+                    │  • Victory Auditor Gate      │
+                    └──────────────────────────────┘
 ```
 
-### 1. 三级自适应敏捷路由 (Tiered Agile Router)
-告别一刀切的重型团队架构，根据任务复杂度和文件规模自动分流：
-- **L1 极速双人组 (Agile Duo: Worker + Critic)**：  
-  专为中小重构、单文件 Bug 修复、轻量脚本编写设计。跳过冗长规划阶段，直出代码并即刻交由审计员严格复验，0 沟通损耗。
-- **L2 标准战术组 (Standard Squad: Lead + Worker + Critic)**：  
-  经典 Antigravity 三角色对齐架构。Team Lead 负责战术拆解与里程碑立项，Worker 专注核心实现，Critic 负责回归测试与交付裁决。
-- **L3 重装对抗组 (Full Adversarial: Lead + Worker + Critic + Architect)**：  
-  应对高危模块改造与全系统架构攻坚。引入红队对抗思维，Critic 针对边缘边界进行破坏性测试，Architect 对全局依赖与安全性最终签字。
+### 1. 主动存活检测与死锁自愈看门狗 (Sentinel Watchdog & Auto-Healing)
+对齐 Antigravity Sentinel 监控守护体系：
+- **存活心跳与停滞研判**：主动巡检 `events.jsonl` mtime、开放里程碑持续时间；超过阈值生成阶梯式 Nudge 告警。
+- **死锁自动修复 (Auto-Heal)**：自动检测并释放过期的文件租约（Lease Pruning），回收超时遗留的子代理预留令牌（Abandoned Reservations），化解 Worker 异常退出引发的系统锁死。
+- **常驻后台模式**：支持一键运行 `npm run watchdog` 或 `--daemon` 守护模式。
 
-### 2. 真机命令二次复测与反作弊引擎 (Anti-Fake Evidence)
-- **真子进程重执行**：针对模型伪造虚假测试脚本或虚假 `git` 日志，Critic 引擎具备真机二次调用 (`reverifyCommand`) 能力，由系统真实拉起 OS 进程验证退出码。
-- **自适应代码门限 (`MIN_CODE_DELIVERABLE_BYTES = 64`)**：杜绝盲目的 2KB 死板下限限制，精准放行短小精悍的修复，同时强力拦截无实际逻辑的空桩文件。
-- **动态证据链 (`evidence: latest`)**：智能体在声明交付时支持关联动态生成的最新日志证据，彻底解决硬编码文件哈希在跨步重试中失效的顽疾。
+### 2. 自我继承协议与永久退役铁律 (Self-Succession Protocol)
+对齐 Antigravity 长程会话交接标准：
+- **永久退役铁律 (Permanently Retired)**：一旦主控由于预算上限或上下文过载执行交接，上一代实例立即标记永久报废，严禁复用，从物理上杜绝历史上下文累积污染与幻觉漂移。
+- **无缝换代接力**：自动生成不可变的归档数据 `.teamwork/handoffs/gen-<N>.json` 与供后继者阅读的 `BRIEFING.md`，平滑激活 `_gen<N+1>` 代代理。
 
-### 3. OLED 纯黑与微透物理毛玻璃大盘 (Liquid Glass Dashboard)
-- 遵循顶级金融与量化级工业设计规范，提供 OLED 纯黑背景 (`#000000`) 与半透明微折射毛玻璃视觉享受。
-- 自动提取状态并实时编译为 **Mermaid 状态机与依赖 DAG**，进度、心跳、文件独占所有权、派发预算一目了然。
+### 3. 五大 Antigravity 专业化路由路径 (Specialized Routing Paths)
+- **SWE Light (`swe-light`)**：单文件/自包含快速修复。遵循**反拆分铁律（Does NOT decompose）**，单一实现者配合审校者对决，节省 80%+ Token。
+- **General (`general`)**：常规大型软件工程与跨模块重构，里程碑拓扑拆解，配备独立测试编写者。
+- **Document Review (`document-review`)**：论文、RFC 与规范文档评审，基于递归自聚合（RSA）锦标赛树进行并行分段审校。
+- **Math & Proof (`math-proof`)**：数学定理推导与形式化证明，Colosseum 多阶段流水线严格查验逻辑漏洞。
+- **Adversarial Quant (`adversarial-quant`)**：量化模型、金融 Alpha 挖掘、红队安全、共识算法等极端高敏场景，激活全部 11 角色武装。
+
+### 4. 专职黑板架构 (Shared Blackboard Architecture)
+- 中心黑板 `.teamwork/blackboard.json` 串行汇总各特工的公共输出与接口契约。
+- 提供原子提交（`postUpdate`）、审计留痕与分类检索（`queryBlackboard`），彻底解决多智能体并发写状态冲突。
+
+### 5. 意图绝对权威记录 (`ORIGINAL_REQUEST.md`)
+- 在项目根目录以 **Append-Only（只增不减）** 形式记录用户原始需求与时间戳。
+- 作为整个系统不受上下文截断、崩溃和代理换代影响的**终极真理源（Ground Truth）**，终审裁决必须对照此文件做实质复核。
+
+---
+
+## 🛡️ 11 大特种智能体角色与权限矩阵
+
+Teamwork 彻底摒弃“单一全能 Agent 自己审自己”的模式，采用严格的角色权限隔离矩阵：
+
+| 角色 | 权限与工具矩阵 | 核心职责与设计原则 |
+| :--- | :--- | :--- |
+| **Sentinel (哨兵)** | Read, Grep, Glob, TodoWrite | 战役起点关卡，审查宪章完整性与完整性模式，监控存活心跳，严禁写业务代码 |
+| **Orchestrator (编排)** | Read, Grep, Glob, TodoWrite | 战役依赖拆解与文件排他所有权划分；**硬约束：NEVER write code** |
+| **Explorer (探索)** | Read, Grep, Glob, WebFetch, WebSearch | 只读调研代码库、定位接口与绘制调用拓扑，严禁 Edit/Write/Bash |
+| **Worker (工人)** | Read, Grep, Glob, Edit, Write, Bash, TodoWrite | **唯一生产代码编写者**，严格限制在分配的文件租约范围内 |
+| **Test Writer (测试编写)** | Read, Grep, Glob, Edit, Write, Bash, TodoWrite | **独立编写全面测试用例**（仅限测试目录），严禁修改业务生产代码，杜绝自我迎合 |
+| **Spec Miner (规范挖掘)** | Read, Grep, Glob, WebFetch, WebSearch, TodoWrite | 只读从规范、文档、RFC、头文件、Proto 中提取权威接口与断言契约 |
+| **Critic (缺陷审查)** | Read, Grep, Glob, Bash *(禁写)* | 攻击**实现细节**：边界未处理、空指针、内存泄漏、契约破坏 |
+| **Challenger (红队证伪)** | Read, Grep, Glob, Bash, WebFetch, WebSearch *(禁写)* | 攻击**方案前提**：未来函数、过拟合、弱基准套利、虚假因果链 |
+| **Empirical Challenger (混沌红队)** | Read, Grep, Glob, Bash, Edit, Write *(仅限fuzz目录)* | 构造模糊测试（Fuzzing）、反例生成器与极限破坏测试，用客观事实攻击 Worker 代码 |
+| **Auditor (独立复现)** | Read, Grep, Glob, Bash *(禁写)* | 从全新干净状态真实复跑命令与物证，绝不信任 Worker 的汇报文本 |
+| **Success Auditor (收官终审)** | Read, Grep, Glob, Bash *(禁写)* | **全战役收官终审强制门禁**，对照 `ORIGINAL_REQUEST.md` 进行零信任三阶段复测 |
 
 ---
 
 ## 🛠️ 命令体系与使用指引
 
-在 ZCode 中，Teamwork 已原生注册为斜杠指令，直接键入即可开始高效协作：
+在 ZCode / CatPaw 中，Teamwork 已原生注册为斜杠指令，直接键入即可开始高效协作：
 
 ### 1. 发起协同研发：`/teamwork`
 ```bash
-# 智能自适应模式（自动研判任务复杂度）
+# 智能自适应模式（自动研判任务复杂度并匹配 5 大专业化路由）
 /teamwork "重构认证模块并增加双因素鉴权，确保单元测试覆盖率达95%"
 
-# 强制指定敏捷级别 (L1 敏捷双人 / L2 标准战术 / L3 重装对抗)
+# 强制指定敏捷级别或任务路径
 /teamwork --tier 1 "修复 lib/parser.mjs 第 45 行空指针异常"
-/teamwork --tier 3 "升级核心存储引擎并引入跨集群容灾同步"
+/teamwork --tier 3 "升级核心量化交易撮合引擎并引入模糊反例测试"
 ```
 
 ### 2. 洞察实时战况：`/teamwork-status`
-无论任务正在推进还是等待审核，随时输入：
 ```bash
 /teamwork-status
 ```
-控制台与会话区将瞬时渲染出当前团队的：
+终端与看板瞬时渲染出：
 - **任务拓扑与依赖泳道图 (Mermaid DAG)**
 - **智能体实时心跳与在席状态**
 - **文件独占写锁分布图**
 - **证据审计流水与验证摘要**
 
-### 3. 安全交付封板：`/teamwork-end`
+### 3. 实时看门狗与终端大盘：
+```bash
+# 单次运行健康巡检与死锁自愈
+npm run watchdog
+
+# 启动 OLED 纯黑实时监控大盘 (2s 动态刷新)
+npm run watch
+```
+
+### 4. 安全交付封板：`/teamwork-end`
 ```bash
 /teamwork-end
 ```
@@ -115,84 +155,34 @@
 
 ---
 
-## 🛡️ 智能体角色与物理硬约束矩阵
-
-| 角色 | 核心职责 | 约束边界与安全防线 |
-| :--- | :--- | :--- |
-| **Team Lead (主控)** | 任务拆分、拓扑排期、全局资源把控 | 严格受派发预算上限（Dispatch Budget）约束，杜绝死循环派发 |
-| **Worker (工程)** | 生产代码编写、接口实现、单元测试开发 | 遵循文件独占写锁机制，禁止写入未经授权的非分配模块 |
-| **Critic (审计)** | 独立执行测试、证据采样、物理真伪裁决 | 必须在真实系统执行指令并产出带哈希的不可伪造证据文件 |
-| **Architect (架构)** | 顶层契约维护、架构反退化、安全合规签字 | 仅在 L3 模式中激活，对系统契约性破坏具备一票否决权 |
-
-### 七大守护进程拦截机制
-
-1. **PreToolUse 拦截**：派发次数超标即刻挂起；并发 Worker 超限即刻拦截；跨区写文件直接在 OS 层拒绝。
-2. **PostToolUse 审计**：每一次工具执行的入参与出参均实时计入不可篡改的 `.zcode/teamwork/audit/` 物理审计日志。
-3. **Stop 强门禁拉回**：只要 `campaign.json` 标记完成但磁盘上缺乏对应的验证记录，收尾调用立刻抛出硬性错误，逼迫模型回归修复。
-
----
-
 ## 📊 架构验证与测试表现
 
-本项目经过严格的工程化建设，具备完备的测试用例体系：
+本项目采用 **零第三方依赖（Zero External Dependencies）** 架构，完全基于 Node.js 原生标准库实现，测试集覆盖并发竞态、边界恢复、Frontmatter 契约、防作弊验证与看门狗自愈：
 
-```powershell
-# 运行全量 932 个自动化测试用例
+```bash
+# 运行全量自动化测试套件
 npm test
 ```
 
-```text
-✔ tests/router.test.mjs           (Tiered Agile Routing & Strategy)
-✔ tests/evidence.test.mjs         (Physical Execution & Anti-Cheating Engine)
-✔ tests/dashboard.test.mjs        (Liquid Glass UI & Mermaid DAG Generator)
-✔ tests/invariants.test.mjs       (PreToolUse/Stop Hook Enforcement)
-✔ tests/concurrency.test.mjs      (Lock contention & Race-condition Hardening)
-✔ tests/enhancements.test.mjs     (v0.4.0 Google Antigravity Alignment Suite)
-
-Total Tests: 932 passed, 0 failed, 100% compliance
+```
+======================================================================
+  PASS  frontmatter.test.mjs        (267 tests)
+  PASS  hooks.test.mjs              (86 tests)
+  PASS  lib.test.mjs                (112 tests)
+  PASS  engine.test.mjs             (167 tests)
+  PASS  patterns.test.mjs           (145 tests)
+  PASS  evidence.test.mjs           (60 tests)
+  PASS  concurrency.test.mjs        (39 tests)
+  PASS  enhancements.test.mjs       (9 tests)
+  PASS  antigravity-alignment.test  (37 tests)
+  PASS  journal-boundary.test.mjs   (47 tests)
+----------------------------------------------------------------------
+  TOTAL: 969+ passed, 0 failed (100% Green)
+======================================================================
 ```
 
 ---
 
-## 📦 环境要求与任意电脑一键部署 (Zero-Config)
+## 📄 开源许可
 
-### 环境准备
-- **Node.js**：`>= 18.0.0`（请确保 `node` 已添加到系统的环境变量 `PATH` 中）。
-- **ZCode**：支持 Windows / macOS / Linux 任意主流 ZCode 客户端或 CLI。
-
-### 换新电脑一键自动部署
-在任何新机器上，拉取仓库后只需运行一行脚本，系统将**自动检测用户目录、动态生成绝对路径并注入 ZCode 全局与工作区设置**，彻底杜绝路径写死与钩子失效：
-
-```powershell
-# 1. 克隆代码库
-git clone https://github.com/1535273240sch-droid/zcode-teamwork.git
-cd zcode-teamwork
-
-# 2. 一键自动化部署与全量环境装配
-npm run setup
-```
-
-部署脚本会自动完成：
-1. 拷贝插件至 ZCode 官方插件扩展空间。
-2. 自动在 `~/.zcode/cli/config.json` 与当前工作区中注册 **7 大底层物理硬钩子**（让 ZCode 桌面端「设置 → 钩子」界面立刻正常显示所有钩子）。
-3. 挂载 `/teamwork`、`/teamwork-status`、`/teamwork-end` 原生指令与特种智能体角色。
-
----
-
-## 📺 OLED 纯黑大盘与终端实时监控 (Mission Control)
-
-除了在 ZCode 对话中输入 `/teamwork-status`，您还可以直接在终端拉起专属的**黑屏实时刷新大盘**，如同金融量化终端般实时监控战况：
-
-```powershell
-# 启动黑屏实时刷新大盘（每 2 秒自动刷新，展示当前进度、心跳、独占写锁与拓扑 DAG）
-npm run watch
-
-# 单次打印当前任务看板
-npm run dashboard
-```
-
----
-
-## 📄 开源许可证
-
-本项目基于 [MIT 许可证](LICENSE) 发布。欢迎社区极客、量化团队与全自主智能体研究者共同探索多智能体协同工程的物理前沿！
+本项目基于 [MIT](LICENSE) 许可证开源。

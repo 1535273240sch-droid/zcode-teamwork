@@ -19,7 +19,8 @@
 //
 // ASCII only: protocol artifact.
 
-import {existsSync} from 'node:fs';
+import {existsSync, mkdirSync, writeFileSync, readFileSync} from 'node:fs';
+import {join} from 'node:path';
 
 import {isExpired} from './ownership.mjs';
 import {openMilestones, isCampaignActive} from './state.mjs';
@@ -295,3 +296,89 @@ export function assessFromPaths(paths, options = {}) {
 	else if (existsSync(paths.events)) last = lastEventAt(paths.events);
 	return assessStaleness({state, lastEventAt: last, now: options.now, staleMinutes: options.staleMinutes});
 }
+
+/**
+ * Execute Antigravity-aligned Self-Succession protocol.
+ *
+ * 1. Writes handoff briefing and structured payload to stateDir/handoffs/gen-<N>.json
+ * 2. Marks the outgoing generation as PERMANENTLY RETIRED (Iron Rule: no reuse after handoff)
+ * 3. Prepares successor definition (_gen<N+1>) with lineage tracing
+ */
+export function executeSuccession(input = {}) {
+	const {state, stateDir = '.teamwork', generation = 1, reason = 'budget-or-context-threshold', now = Date.now()} = input;
+	if (!state || typeof state !== 'object') {
+		return {ok: false, reason: 'no campaign state for succession'};
+	}
+
+	const handoffsDir = join(stateDir, 'handoffs');
+	if (!existsSync(handoffsDir)) {
+		mkdirSync(handoffsDir, {recursive: true});
+	}
+
+	const currentGenId = `gen-${generation}`;
+	const nextGenId = `gen-${generation + 1}`;
+
+	const handoffData = buildHandoff(state, {reason, now});
+	const briefingText = renderBriefing({state, reason, stateDir});
+
+	// Save handoff archive
+	const genFile = join(handoffsDir, `${currentGenId}.json`);
+	const record = {
+		generation,
+		genId: currentGenId,
+		nextGenId,
+		retired: true,
+		retiredAt: new Date(now).toISOString(),
+		reason,
+		handoff: handoffData,
+	};
+	writeFileSync(genFile, JSON.stringify(record, null, 2), 'utf8');
+
+	// Write briefing.md
+	const briefingFile = join(stateDir, 'BRIEFING.md');
+	writeFileSync(briefingFile, briefingText, 'utf8');
+
+	// Record in generations registry
+	const regFile = join(stateDir, 'generations.json');
+	let registry = {};
+	if (existsSync(regFile)) {
+		try {
+			registry = JSON.parse(readFileSync(regFile, 'utf8'));
+		} catch {
+			registry = {};
+		}
+	}
+	registry[currentGenId] = {
+		retired: true,
+		retiredAt: new Date(now).toISOString(),
+		successor: nextGenId,
+		reason,
+	};
+	registry.activeGeneration = nextGenId;
+	writeFileSync(regFile, JSON.stringify(registry, null, 2), 'utf8');
+
+	return {
+		ok: true,
+		currentGeneration: currentGenId,
+		nextGeneration: nextGenId,
+		retired: true,
+		briefingPath: briefingFile,
+		handoffPath: genFile,
+		instruction: `Generation ${currentGenId} is permanently retired. Successor ${nextGenId} must resume from BRIEFING.md.`,
+	};
+}
+
+/**
+ * Check if a generation is retired.
+ */
+export function isGenerationRetired(genId, stateDir = '.teamwork') {
+	const regFile = join(stateDir, 'generations.json');
+	if (!existsSync(regFile)) return false;
+	try {
+		const reg = JSON.parse(readFileSync(regFile, 'utf8'));
+		return reg[genId]?.retired === true;
+	} catch {
+		return false;
+	}
+}
+
