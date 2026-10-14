@@ -51,10 +51,11 @@ to offer an update. Bump both, or installed users will never be told there is a 
 ### Fixed
 
 - **带空格的引号路径解析错误 (`hooks/bash-guard.mjs`)**：`extractTargets` 的正则在空格处截断，`"E:\新建文件夹 (7)/src/x.ts"` 被解析成 `"E:\新建文件夹`。这不仅是新功能失效——既有 ownership 锁也会为不存在的路径建锁键，而本机工作区路径恰好含空格，属必然踩中的洞。现在路径参数按"引号串（可含空格）或裸令牌"两种形式匹配，`mv`/`cp` 的源与目标捕获组也一并修正。
+- **路径中的字面 `~` 被误当作家目录展开而丢弃 (`hooks/bash-guard.mjs`)**：`normaliseTarget` 原先只要在任意位置发现 `~` 就丢弃整个目标。但 `~` 只在**词首**具有展开含义，词中的 `~` 是普通路径字符——Windows 短名（如 `C:\Users\RUNNER~1\...`）正是如此，CI 检出目录与相当一部分用户配置目录都经由它抵达。原文因此在这类工作区上把每个目标都丢光，使路径校验静默失效。现改为仅拒绝词首 `~`；与位置无关的展开字符（`*?$`、反引号、`{}`、`[]`）仍按原样一律拒绝。该缺陷由 Windows CI 暴露：本机临时目录无 `~` 因而掩盖了它。
 
 ### Tests
 
-- 新增 `tests/worktree-boundary.test.mjs`（41 项）：边界注册表与原型污染、合并授权、worktree 改动清单（含"以 HEAD 为基线会漏掉已提交改动"）、Bash 守卫的越界/相对路径/兄弟 worktree/程序化写入/惰性回退。fixture 目录**故意含空格**，以复现上述解析缺陷；测试以明确的 SKIP 失败项处理 git 不可用的环境，而非静默通过。
+- 新增 `tests/worktree-boundary.test.mjs`（43 项）：边界注册表与原型污染、合并授权、worktree 改动清单（含"以 HEAD 为基线会漏掉已提交改动"）、Bash 守卫的越界/相对路径/兄弟 worktree/程序化写入/惰性回退，以及 `~` 的位置语义（词中为字面量、词首仍按展开处理）。fixture 目录**故意含空格**以复现上述解析缺陷；测试以明确的 SKIP 失败项处理 git 不可用的环境，而非静默通过。
 - 新增 `tests/tournament.test.mjs`（60 项）：pattern 校验与计划检查、分解形状、陷阱注册表的覆盖语义与损坏回退、合成简报，以及引擎端的端到端建战役流程。
 - `tests/patterns.test.mjs` 的 pattern 数量断言由 6 更新为 7（5 处）。
 - 全套 11 个 suite 本地通过。

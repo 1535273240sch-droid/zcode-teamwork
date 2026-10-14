@@ -90,7 +90,16 @@ function normaliseTarget(token) {
 	if (!t) return undefined;
 	if (t === '-') return undefined;
 	if (/^[a-z][a-z0-9+.-]*:\/\//i.test(t)) return undefined; // URL
-	if (/[*?$`{}\[\]~]/.test(t)) return undefined; // expansion
+	// Expansion characters whose meaning does not depend on position: a glob, a
+	// variable or a command substitution expands wherever it appears.
+	if (/[*?$`{}\[\]]/.test(t)) return undefined;
+	// `~` is position-sensitive. It is only special as the first character of a word, so
+	// a `~` in the middle is a literal path character - as in the Windows short name
+	// C:\Users\RUNNER~1\..., which is how CI checkouts and many user profiles are
+	// reached. Rejecting it anywhere discarded the target outright and so silently
+	// disarmed every path check on such a workspace, which is the failure this module
+	// exists to prevent.
+	if (t.startsWith('~')) return undefined; // home expansion
 	return t;
 }
 
