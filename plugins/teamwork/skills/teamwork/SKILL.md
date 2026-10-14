@@ -64,7 +64,7 @@ Write it to `.teamwork/campaign.json` in the working directory. This file activa
 {
   "objective": "<one sentence, checkable>",
   "integrity_mode": "development | demo | benchmark",
-  "pattern": "iterative-coding | distributed-coding | long-proof | self-verification | document-review",
+  "pattern": "distributed-coding | iterative-coding | document-review | math-proof | self-verification | research | tournament",
   "working_directory": "<absolute path>",
   "requirements": ["<constraint>"],
   "out_of_scope": ["<explicitly excluded>"],
@@ -83,7 +83,7 @@ The hooks read three fields, and nothing happens until the first two line up:
 | Field | Read by | Effect |
 |---|---|---|
 | `approved` | both ownership hooks | must be `true` before the hooks arm at all |
-| `phase` | both ownership hooks | must be `"execution"` before the hooks arm at all |
+| `phase` | both ownership hooks | must be one of `"approved"`, `"executing"`, `"verifying"` before the hooks arm at all |
 | `ownership_lease_minutes` | ownership hooks | how long a write claim survives without activity |
 | `pattern` | `ownership-lock.mjs` | `distributed-coding` turns on the attribution warning |
 | `integrity_mode` | `session-context.mjs` | injects the mode constraints at session start |

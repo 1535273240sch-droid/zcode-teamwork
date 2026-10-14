@@ -6,7 +6,7 @@
       "name": "teamwork",
       "source": "./plugins/teamwork",
       "description": "Collaborative multi-agent team aligned with Google Antigravity Teamwork: eleven roles, active watchdog deadlock auto-healing, self-succession protocol, shared blackboard, five specialized routing paths, exclusive file ownership, and verification-driven convergence.",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "category": "Developer Tools",
       "tags": [
         "multi-agent",
@@ -14,7 +14,9 @@
         "long-horizon",
         "verification",
         "antigravity",
-        "watchdog"
+        "watchdog",
+        "worktree-isolation",
+        "tournament"
       ]
     },
     {

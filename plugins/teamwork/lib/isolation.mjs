@@ -25,7 +25,7 @@
 //
 // ASCII only: protocol artifact.
 
-import {existsSync, mkdirSync, rmSync} from 'node:fs';
+import {existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync} from 'node:fs';
 import {join, resolve} from 'node:path';
 import {execFileSync} from 'node:child_process';
 
@@ -127,6 +127,11 @@ export function createIsolation(options) {
 
 	if (wanted === 'worktree') {
 		const branch = branchNameFor(workstreamId, now);
+		// The commit this worktree forks from. Recorded because the merge check must
+		// diff against it rather than against the worktree's own HEAD: once a Worker
+		// commits on its branch, `git diff HEAD` inside the worktree is empty, and a
+		// check built on that would report a clean merge for work it never examined.
+		const fork = git(['rev-parse', 'HEAD'], cwd);
 		if (!existsSync(paths.worktree)) {
 			const added = git(['worktree', 'add', '-b', branch, paths.worktree, 'HEAD'], cwd);
 			if (!added.ok) {
@@ -143,10 +148,11 @@ export function createIsolation(options) {
 		} catch {
 			return createIsolatedDir(paths, workstreamId, {wanted: 'worktree', reason: 'worktree scratch was not writable'});
 		}
-		return {
+		const result = {
 			ok: true,
 			mode: 'worktree',
 			branch,
+			base: fork.ok ? fork.stdout : 'HEAD',
 			worktreePath: paths.worktree,
 			scratchDir: scratch,
 			// Removing a worktree discards uncommitted work in it. That is the point of
@@ -154,6 +160,15 @@ export function createIsolation(options) {
 			// is offered and never invoked by this module.
 			cleanup: {command: 'git', args: ['worktree', 'remove', paths.worktree, '--force'], cwd},
 		};
+		// A worktree nobody records is isolation the guard cannot see: the Bash hook
+		// resolves writes against an owner token, and this is the only place the token
+		// and the checkout are tied together. Absent an owner, nothing is recorded and
+		// the hook stays exactly as inert as it was before boundaries existed.
+		if (typeof options.owner === 'string' && options.owner.length > 0) {
+			const recorded = recordBoundary(stateDir, {...result, owner: options.owner, workstreamId});
+			if (recorded.ok) result.boundary = recorded.boundary;
+		}
+		return result;
 	}
 
 	if (wanted === 'shared-workspace') {
@@ -278,4 +293,151 @@ export function describeIsolation(isolation) {
 /** Absolute path helper used by callers that pass a relative state dir. */
 export function absoluteStateDir(stateDir, cwd = process.cwd()) {
 	return stateDir.startsWith('/') ? stateDir : resolve(cwd, stateDir);
+}
+
+// ---------------------------------------------------------------------------
+// Execution boundaries
+//
+// A worktree is only isolation if the Worker actually stays in it. Creating one and
+// telling the agent about it is not enforcement: the Bash guard sees every shell
+// write but has no way to know which checkout a given owner was given. This registry
+// is that missing link - the engine records it while preparing isolation, and the
+// guard reads it to decide whether a write target lies inside its owner's checkout.
+//
+// Absence is meaningful and must stay cheap. With no entry for an owner, every check
+// built on this is inert and the hooks behave exactly as they did before the registry
+// existed. A campaign that never asks for isolation must not be policed by a feature
+// it did not enable.
+
+export const BOUNDARIES_NAME = 'boundaries.json';
+
+export function boundariesPath(stateDir) {
+	return join(stateDir, BOUNDARIES_NAME);
+}
+
+// Keys that would reach Object.prototype if assigned onto a normal object. The file
+// is keyed by an owner token that originates in the environment, so a crafted token
+// must not be able to pollute the prototype of the map it is inserted into.
+const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+/** Every recorded boundary, keyed by owner. Empty when none was ever recorded. */
+export function readBoundaries(stateDir) {
+	const store = Object.create(null);
+	try {
+		const parsed = JSON.parse(readFileSync(boundariesPath(stateDir), 'utf8'));
+		if (!parsed || typeof parsed !== 'object') return store;
+		for (const [owner, entry] of Object.entries(parsed)) {
+			if (DANGEROUS_KEYS.has(owner)) continue;
+			if (!entry || typeof entry !== 'object') continue;
+			store[owner] = entry;
+		}
+	} catch {
+		// Missing or malformed: no boundary is in force. Failing open is the right
+		// direction, because the guard then falls back to the ownership table - the
+		// invariant that does hold when there is no isolation to enforce.
+	}
+	return store;
+}
+
+function writeBoundaries(stateDir, store) {
+	mkdirSync(stateDir, {recursive: true});
+	const file = boundariesPath(stateDir);
+	const tmp = `${file}.${process.pid}.tmp`;
+	writeFileSync(tmp, JSON.stringify(store, null, 2), 'utf8');
+	// The rename is the commit point: a reader sees either the previous map or this
+	// one, never a half-written file that parses as a boundary with no worktree in it.
+	renameSync(tmp, file);
+}
+
+/**
+ * Record where one owner is allowed to write.
+ *
+ * Only a real worktree produces a boundary. An isolated directory is not one: it has
+ * an absolute scratch path, but a Worker there still shares the repository, so
+ * confining writes to that path would deny it the source tree it was asked to change.
+ * Recording only the tier that can actually be enforced is what keeps the guard from
+ * refusing legitimate edits.
+ */
+export function recordBoundary(stateDir, input) {
+	if (typeof input?.owner !== 'string' || input.owner.length === 0) {
+		return {ok: false, reason: 'owner is required'};
+	}
+	if (input.mode !== 'worktree' || typeof input.worktreePath !== 'string' || input.worktreePath.length === 0) {
+		return {ok: false, reason: 'only a worktree checkout has an enforceable boundary'};
+	}
+	const store = readBoundaries(stateDir);
+	// Stored absolute: a boundary recorded relative to one process is not reproducible
+	// in a hook that runs from a different working directory.
+	store[input.owner] = {
+		mode: 'worktree',
+		worktreePath: resolve(input.worktreePath),
+		scratchDir: typeof input.scratchDir === 'string' ? resolve(input.scratchDir) : null,
+		workstreamId: input.workstreamId ?? null,
+		branch: input.branch ?? null,
+		base: input.base ?? 'HEAD',
+		recordedAt: input.now ?? Date.now(),
+	};
+	try {
+		writeBoundaries(stateDir, store);
+	} catch (error) {
+		return {ok: false, reason: `could not record the boundary: ${error.message}`};
+	}
+	return {ok: true, boundary: store[input.owner], path: boundariesPath(stateDir)};
+}
+
+/** Drop a boundary once the workstream has merged or been abandoned. */
+export function clearBoundary(stateDir, owner) {
+	const store = readBoundaries(stateDir);
+	if (!(owner in store)) return {ok: true, removed: false};
+	delete store[owner];
+	try {
+		writeBoundaries(stateDir, store);
+	} catch (error) {
+		return {ok: false, reason: `could not clear the boundary: ${error.message}`};
+	}
+	return {ok: true, removed: true};
+}
+
+/** The boundary in force for one owner, if any. */
+export function boundaryFor(stateDir, owner) {
+	return readBoundaries(stateDir)[owner];
+}
+
+/**
+ * Files a worktree has changed, relative to the commit it forked from.
+ *
+ * Two commands, because one is not enough. `git diff --name-only` sees tracked
+ * modifications and misses every file the Worker created but never added - and
+ * creating files is most of what a Worker does, so a check built on the diff alone
+ * would wave through exactly the case it exists to catch. Untracked paths are
+ * therefore folded in from `git status --porcelain`.
+ *
+ * The base is the fork point rather than HEAD. In a worktree whose Worker has
+ * committed, HEAD already contains the work, so diffing against it reports nothing.
+ */
+export function worktreeChanges(worktreePath, options = {}) {
+	if (typeof worktreePath !== 'string' || worktreePath.length === 0) {
+		return {ok: false, reason: 'worktreePath is required'};
+	}
+	const base = typeof options.base === 'string' && options.base.length > 0 ? options.base : 'HEAD';
+	const diff = git(['diff', '--name-only', base], worktreePath);
+	// A diff that cannot be read has not passed. Reporting an empty change set here
+	// would turn an unreadable worktree into an approved merge.
+	if (!diff.ok) return {ok: false, reason: `could not read "git diff --name-only ${base}" in the worktree`};
+
+	const changed = new Set(diff.stdout.split('\n').map((line) => line.trim()).filter(Boolean));
+
+	if (options.includeUntracked !== false) {
+		const status = git(['status', '--porcelain', '--untracked-files=all'], worktreePath);
+		if (!status.ok) return {ok: false, reason: 'could not read the worktree status'};
+		for (const line of status.stdout.split('\n')) {
+			// "XY path"; only untracked entries ("??") are added here, since tracked
+			// changes already came from the diff above.
+			if (!line.startsWith('??')) continue;
+			const path = line.slice(3).trim();
+			if (path.length > 0) changed.add(path);
+		}
+	}
+
+	return {ok: true, base, changed: [...changed].sort()};
 }
