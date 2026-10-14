@@ -6,6 +6,67 @@ The version lives in **two** places and they must stay in sync: `plugins/teamwor
 is the installed version, and `marketplace.json` is the version the client compares against to decide whether
 to offer an update. Bump both, or installed users will never be told there is a new one.
 
+## [0.6.0] — 2026-10-15
+
+隔离从"应用层正则拦截"升级为"物理边界强制执行"，并新增锦标赛竞争模式：Worker 的 worktree 不再只是一句口头约定，越界写入会被 Bash 守卫当场拒绝；任务合入前，Worktree 实际改动的文件清单必须与租约授权清单逐一对上。
+
+### Added
+
+- **执行边界注册表 (`plugins/teamwork/lib/isolation.mjs`)**：
+  - 新增 `.teamwork/boundaries.json`，把 **owner 令牌** 与它被分配的 worktree 绑定起来。在此之前，worktree 只是被创建和告知，Bash 守卫无从知道某个 owner 拿到的是哪个 checkout——隔离因此停留在账面上。
+  - `recordBoundary` 只接受真正的 worktree：`isolated-dir` 模式下的 Worker 仍然共享同一份仓库，把写入限制在临时目录里会直接拒绝它去改本该改的源码。只登记能真正执行的那一档，守卫才不会误杀正常编辑。
+  - `readBoundaries` 使用 null 原型对象并拒绝 `__proto__ / constructor / prototype`，因为该文件的键来自环境变量，构造出的 owner 令牌不能污染它所插入的映射原型。
+- **Worktree 改动清单 (`lib/isolation.mjs`)**：
+  - `worktreeChanges()` 同时用 `git diff --name-only` 与 `git status --porcelain`：前者看不到 Worker 新建但未 `git add` 的文件，而"建文件"正是 Worker 的主要产出。
+  - 比较基线是**创建 worktree 时的 fork 提交**，不是 `HEAD`。Worker 在自己的分支上提交后，worktree 内的 `git diff HEAD` 为空——用 HEAD 会让校验对已提交的改动完全失明。`createIsolation` 现在会把该 fork 点记录进边界。
+  - 读取失败一律返回 `ok: false`：无法计算的校验不等于通过。
+- **合并授权校验 (`lib/ownership.mjs` 的纯函数 `authorizeMerge`)**：
+  - 比对 Worktree 改动清单与租约白名单，`src/` 形式的目录前缀可授权其下全部内容。
+  - 与 git 调用分离（git 只在 `lib/isolation.mjs` 中），因此该比较无需仓库即可单元测试。
+  - 授权清单为空同样判负——没有比较对象的校验并没有通过，只是没有运行。
+  - 引擎侧入口：`engine.checkMerge(workstreamId, owner)` 组合两半并返回裁决，`engine.boundaries()` / `engine.releaseBoundary(owner)` 管理边界生命周期。
+- **Bash 守卫执行期边界约束 (`plugins/teamwork/hooks/bash-guard.mjs`)**：
+  - 目标落在共享 checkout（或**另一个 Worker 的 worktree**）而该 owner 已被分配 worktree 时，直接拒绝，并说明越界目标与所属 worktree。
+  - 程序化写入（`node -e` / `python -c` / `deno eval` / `bun -e` / `ruby -e` / `php -r`）在受限模式下拒绝：这类命令的写入目标无法从命令行读出，而获得独立 checkout 的 Worker 只需在自己目录里重跑即可，代价为零，因此不做过目即放行。该规则与"是否出现写 API"配对使用，以免误杀 `node -e "console.log(...)"` 这类求值命令。
+  - **默认完全惰性**：未记录边界的 owner 行为与 0.5.0 逐字一致，未启用隔离的战役不会被一个它没开启的功能约束。
+  - 相对路径不判为越界：守卫无从得知 shell 的真实工作目录，猜测会大量误杀普通构建命令。
+- **锦标赛模式 (`lib/patterns.mjs`, `lib/decompose.mjs`)**：
+  - 第 7 个 pattern `tournament`：2~3 个并行 Worker 以**不同路线**实现同一难点，每个候选项配对一个 `empirical-challenger` 证伪器，最后由 Orchestrator 合成。
+  - 门禁要求三名独立声音（证伪器 + 审校者 + 审计员），因为锦标赛的目的就是找到"经得起攻击的那条路线"，攻击本身不可选。
+  - 候选项**故意共享文件范围**——比较同一份代码的两种实现正是其意义所在，因此其他 pattern 赖以并行的"文件互斥"规则在此不适用，改由"每个候选项独占 worktree"承担。
+  - 路线只给编号不给描述：在还没有人看过问题之前就指定实现路线，等于取消了"独立尝试"。
+  - synthesis 任务阻塞于**全部证伪任务**而非候选项：它读的是证伪报告，提前开始就只能猜测谁还站着。
+- **陷阱注册表 (`lib/blackboard.mjs`)**：
+  - 持久化 `.teamwork/pitfall-registry.json`，按"轮次 + 候选项"为键；同一候选项重复登记是**覆盖**而非追加——一次尝试只被证伪一次，两条记录会让合成把同一次失败读成互相印证。
+  - `highlights` 是一等字段，不是装饰。锦标赛花掉的是真金白银，只有把"这条死路在被证伪前做对了什么"写下来，这笔开销才可能收回；只记失败原因会让合成变成从零开始。
+  - `synthesisBrief()` 输出合成简报：幸存者单独列出（工作是**选择**其一再从尸体上取其精华，不是把所有方案平均掉）、被证伪者连同原因与亮点逐条列出、无亮点者明确标注为死路。
+  - 引擎侧入口：`engine.recordPitfall` / `engine.pitfalls` / `engine.synthesisBrief`。
+
+### Changed
+
+- **`engine.createPlan` 放行"全员隔离时的文件重叠"**：原规则无条件拒绝两个 milestone 认领同一文件，从结构上禁止了锦标赛。放行的条件挂在**物理隔离**而非 pattern 名字上（`collision.milestones.every((id) => isolated.has(id))`），因为重叠之所以安全靠的是各自独立的 checkout 而不是账本记对；挂在名字上就能被"声明 tournament 但不开隔离"绕过，测试专门守住了这一点。这也让 worktree 机制成为锦标赛的必要前提。
+- **`checkPlanAgainstPattern` 新增隔离不变量**：按计划**实际行为**判定（任何共享文件的 milestone 必须已隔离），而非按标签判定。最初的实现按"是否标记为 candidate"过滤，结果把同样带候选编号的证伪任务也当成了参赛者并要求它们互相竞赛——测试抓到了这个 bug。
+- `skills/teamwork/SKILL.md` 的 pattern 列表修正为真实的 7 个 id（原文写作 `long-proof`，该 id 并不存在，且遗漏 `research`）；`phase` 取值修正为 `approved | executing | verifying`（原文写作 `"execution"`，正是代码注释中记录过的那个"文档与实现不一致导致 hook 静默失效"的旧坑）。
+
+### Fixed
+
+- **带空格的引号路径解析错误 (`hooks/bash-guard.mjs`)**：`extractTargets` 的正则在空格处截断，`"E:\新建文件夹 (7)/src/x.ts"` 被解析成 `"E:\新建文件夹`。这不仅是新功能失效——既有 ownership 锁也会为不存在的路径建锁键，而本机工作区路径恰好含空格，属必然踩中的洞。现在路径参数按"引号串（可含空格）或裸令牌"两种形式匹配，`mv`/`cp` 的源与目标捕获组也一并修正。
+
+### Tests
+
+- 新增 `tests/worktree-boundary.test.mjs`（41 项）：边界注册表与原型污染、合并授权、worktree 改动清单（含"以 HEAD 为基线会漏掉已提交改动"）、Bash 守卫的越界/相对路径/兄弟 worktree/程序化写入/惰性回退。fixture 目录**故意含空格**，以复现上述解析缺陷；测试以明确的 SKIP 失败项处理 git 不可用的环境，而非静默通过。
+- 新增 `tests/tournament.test.mjs`（60 项）：pattern 校验与计划检查、分解形状、陷阱注册表的覆盖语义与损坏回退、合成简报，以及引擎端的端到端建战役流程。
+- `tests/patterns.test.mjs` 的 pattern 数量断言由 6 更新为 7（5 处）。
+- 全套 11 个 suite 本地通过。
+
+### Limits, stated
+
+- **运行期拦截需要 `TEAMWORK_OWNER_TOKEN`**：边界只有在为该 owner 显式登记后才生效，激活方式是每个 Worker 一个进程并带上该环境变量（`ownership-lock.mjs` 早已文档化的模型）。插件不会自动注入它——查证 ZCode hook 规范后可以确认：`PreToolUse` 输出为严格 schema，只有 `additionalContext` 与权限决定两个通道，**无法为被派发的 subagent 设置环境变量**，且 `SubagentStop` 并非受支持事件。要自动绑定 Worker 与其 worktree，必须控制进程启动，即尚未实现的 daemon 层。
+- 计划层的结构性保证（`createPlan` / `checkPlanAgainstPattern` 的拒绝）**不依赖任何环境变量**，直接生效。
+- 相对路径不判为越界，因此边界的真实强度依赖"Worker 确实在自己的 worktree 中执行"；单靠 hook 不构成完整沙箱，物理隔离仍来自 worktree 本身。
+- 锦标赛的候选项**能否真正并行**取决于 spawn budget：`scheduler.mjs` 对超预算批次是"变薄"而非报错。
+- 平台沙箱（bwrap / sandbox-exec）未实现，且在 Windows 上不可用。
+
 ## [0.5.0] — 2026-10-03
 
 100% 深度对齐 Google Antigravity 多智能体协同编排引擎：引入主动存活看门狗与死锁自愈机制、长程会话自我继承协议与永久退役铁律、11 大特种特工矩阵、5 大专业化路由路径、中心黑板架构以及只增不减绝对意图权威记录。

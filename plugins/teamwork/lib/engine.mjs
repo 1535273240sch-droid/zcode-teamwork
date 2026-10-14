@@ -44,12 +44,12 @@ import {
 import {decompose} from './decompose.mjs';
 import {schedule, DEFAULT_SPAWN_BUDGET, resolveSpawnBudget} from './scheduler.mjs';
 import {decideVerifiers, scopedPrompts, judgeGate, createRepairWorkstream} from './verification.mjs';
-import {claim, release, checkWrite, findCollisions, expiredEntries} from './ownership.mjs';
+import {claim, release, checkWrite, findCollisions, expiredEntries, filesOf, authorizeMerge} from './ownership.mjs';
 import {createEvent, appendEvent, summarize} from './journal.mjs';
 import {assessFromPaths, buildHandoff, renderHandoff, renderBriefing, shouldPrepareSuccession, executeSuccession, isGenerationRetired} from './handoff.mjs';
 import {loadPattern, listPatterns, suggestPattern, checkPlanAgainstPattern, describePattern} from './patterns.mjs';
-import {createIsolation, describeIsolation, checkRoleWrite, chooseMode} from './isolation.mjs';
-import {postUpdate as postToBlackboard, readBlackboard, queryBlackboard} from './blackboard.mjs';
+import {createIsolation, describeIsolation, checkRoleWrite, chooseMode, readBoundaries, clearBoundary, worktreeChanges} from './isolation.mjs';
+import {postUpdate as postToBlackboard, readBlackboard, queryBlackboard, recordPitfall as recordPitfallIn, pitfallsFor, synthesisBrief as renderSynthesisBrief} from './blackboard.mjs';
 
 /**
  * A campaign's control surface.
@@ -211,6 +211,9 @@ export class TeamworkEngine {
 			cwd: this.cwd,
 			mode: state?.mode ?? 'standard',
 			integrityMode: state?.integrityMode ?? 'development',
+			// The pattern decides the shape, not just the gate: a tournament campaign
+			// decomposes into competing candidates rather than a linear chain.
+			pattern: state?.pattern,
 		});
 		return {ok: true, ...draft};
 	}
@@ -246,13 +249,22 @@ export class TeamworkEngine {
 		}
 
 		const proposed = milestones.flatMap((m) => (m.files ?? []).map((file) => ({file, milestone: m.id})));
-		const fileCollisions = findCollisions(proposed);
+		// Two milestones claiming one file normally means they can never run together. A
+		// tournament is the exception, and the only one: competing candidates share their
+		// scope deliberately, because comparing two attempts at the same code is the point.
+		// What makes that safe is physical separation rather than bookkeeping, so the
+		// exception is conditioned on every claimant declaring a worktree - not on which
+		// pattern is in force - and a plan cannot buy the exception with a pattern name
+		// while its candidates still share one checkout.
+		const isolated = new Set(milestones.filter((m) => m?.isolation === 'worktree').map((m) => m.id));
+		const fileCollisions = findCollisions(proposed).filter((collision) => !collision.milestones.every((id) => isolated.has(id)));
 		if (fileCollisions.length > 0) {
 			return {
 				ok: false,
 				reason:
 					'two milestones claim the same file, so they can never run at the same time: ' +
-					fileCollisions.map((c) => `${c.file} (${c.milestones.join(', ')})`).join('; '),
+					fileCollisions.map((c) => `${c.file} (${c.milestones.join(', ')})`).join('; ') +
+					'. If they are meant to race, give each of them "isolation": "worktree" so they edit separate checkouts.',
 				collisions: fileCollisions,
 			};
 		}
@@ -505,9 +517,68 @@ export class TeamworkEngine {
 			workstreamId,
 			cwd: this.cwd,
 			mode: options.mode ?? 'auto',
+			// Naming an owner is what turns a worktree into an enforced boundary. Without
+			// it the checkout is still created, but no hook can tell whose it is, and the
+			// Bash guard stays inert for everyone - which is the pre-existing behaviour.
+			owner: options.owner,
 		});
-		if (result.ok) this.log('note', {note: 'isolation created', workstream: workstreamId, mode: result.mode});
+		if (result.ok) {
+			this.log('note', {note: 'isolation created', workstream: workstreamId, mode: result.mode});
+			if (options.owner) {
+				this.log('note', {
+					note: result.boundary ? 'boundary recorded' : 'boundary not recorded',
+					owner: options.owner,
+					mode: result.mode,
+				});
+			}
+		}
 		return result;
+	}
+
+	/**
+	 * Whether a workstream's work may be merged.
+	 *
+	 * Composes the two halves the check needs: what the worktree actually changed, and
+	 * what the ownership table authorised for the milestone the workstream belongs to.
+	 * It returns a refusal rather than throwing, so a caller can record it as a gate
+	 * result - a check that crashed would leave the merge neither refused nor approved,
+	 * which is precisely the ambiguity this exists to remove.
+	 */
+	checkMerge(workstreamId, owner, options = {}) {
+		const state = this.load();
+		if (!state) return {ok: false, reason: 'no campaign'};
+		const boundary = readBoundaries(this.stateDir)[owner];
+		if (!boundary || boundary.mode !== 'worktree') {
+			return {ok: false, reason: `no worktree boundary is recorded for "${owner}"`, owner, workstream: workstreamId};
+		}
+		const changes = worktreeChanges(boundary.worktreePath, {base: options.base ?? boundary.base});
+		if (!changes.ok) return {...changes, owner, workstream: workstreamId};
+
+		// A workstream names the milestone it was created for; ownership is declared per
+		// milestone. Falling back to the workstream id covers a caller that passes a
+		// milestone id directly.
+		const workstream = (state.workstreams ?? []).find((w) => w.id === workstreamId);
+		const milestoneId = workstream?.milestone ?? workstreamId;
+		const verdict = authorizeMerge({changed: changes.changed, authorized: filesOf(state.ownership ?? [], milestoneId)});
+
+		return {
+			...verdict,
+			workstream: workstreamId,
+			milestone: milestoneId,
+			owner,
+			worktree: boundary.worktreePath,
+			base: changes.base,
+		};
+	}
+
+	/** Boundaries currently in force, keyed by owner. */
+	boundaries() {
+		return {ok: true, boundaries: readBoundaries(this.stateDir)};
+	}
+
+	/** Drop a workstream's boundary once its work has merged. */
+	releaseBoundary(owner) {
+		return clearBoundary(this.stateDir, owner);
 	}
 
 	/** Whether a role may write, given its job. */
@@ -532,6 +603,39 @@ export class TeamworkEngine {
 			return queryBlackboard(this.stateDir, filter);
 		}
 		return {ok: true, blackboard: readBlackboard(this.stateDir)};
+	}
+
+	// -- tournament --------------------------------------------------------
+
+	/**
+	 * Record a candidate that was falsified.
+	 *
+	 * The registry is the only thing that makes a lost attempt worth having run, so an
+	 * entry with no reason is refused rather than stored as a placeholder. Highlights
+	 * are optional here and strongly encouraged in the prompt: a falsification with
+	 * nothing salvageable is a legitimate result, but it has to be stated.
+	 */
+	recordPitfall(entry = {}) {
+		const result = recordPitfallIn(this.stateDir, entry);
+		if (result.ok) {
+			this.log('note', {
+				note: 'pitfall recorded',
+				round: result.pitfall.round,
+				candidate: result.pitfall.candidate,
+				replaced: result.replaced,
+			});
+		}
+		return result;
+	}
+
+	/** Pitfalls recorded so far, optionally narrowed to one round. */
+	pitfalls(filter = {}) {
+		return {ok: true, ...pitfallsFor(this.stateDir, filter)};
+	}
+
+	/** The brief an Orchestrator reads before synthesising a tournament round. */
+	synthesisBrief(options = {}) {
+		return renderSynthesisBrief(this.stateDir, options);
 	}
 
 	// -- continuity --------------------------------------------------------

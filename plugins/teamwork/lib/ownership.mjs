@@ -194,3 +194,67 @@ export function findCollisions(proposed) {
 export function expiredEntries(ownership, now = Date.now()) {
 	return ownership.filter((entry) => isExpired(entry, now));
 }
+
+// ---------------------------------------------------------------------------
+// Merge authorisation
+//
+// `checkWrite` above is a promise about the future: this file may be written by this
+// milestone. This is the other end of it - a check on what a workstream actually
+// changed, run when the work comes back to be merged. A Worker that ignored the
+// table, by writing through a shell or by editing a file it never claimed, shows up
+// here as a changed file that is not in its lease list.
+//
+// The function is pure: it compares two lists and never shells out. Reading the
+// worktree is a separate concern with its own failure modes, and it belongs where
+// every other git call in this plugin already lives, in lib/isolation.mjs
+// (`worktreeChanges`). Keeping the comparison here is what makes it unit-testable
+// without a repository.
+
+/**
+ * Compare what a workstream changed against the files it was authorised to change.
+ *
+ * `authorized` entries are repository-relative. An entry ending in "/" authorises a
+ * directory prefix, so "src/parser/" covers everything under it. That is the only
+ * convenience offered, and it is explicit rather than a wildcard, because a glob
+ * would quietly cover more than the reader of the entry expects.
+ *
+ * `ok` is false when nothing was declared as well as when a file is unauthorised. A
+ * check with no authorisation list to compare against has not passed; it has merely
+ * not run, and reporting that as a pass is the failure this module exists to prevent.
+ */
+export function authorizeMerge(input) {
+	const changed = (Array.isArray(input?.changed) ? input.changed : []).map(normalizePath).filter((f) => f.length > 0);
+	const declared = (Array.isArray(input?.authorized) ? input.authorized : []).map(normalizePath).filter((f) => f.length > 0);
+
+	if (declared.length === 0) {
+		return {
+			ok: false,
+			reason: 'no authorised files were declared, so no change can be authorised',
+			changed,
+			authorized: [],
+			unauthorized: [...changed],
+		};
+	}
+
+	const prefixes = declared.filter((entry) => entry.endsWith('/'));
+	const exact = new Set(declared.filter((entry) => !entry.endsWith('/')));
+
+	const authorized = [];
+	const unauthorized = [];
+	for (const file of changed) {
+		const covered = exact.has(file) || prefixes.some((prefix) => file.startsWith(prefix));
+		(covered ? authorized : unauthorized).push(file);
+	}
+
+	if (unauthorized.length > 0) {
+		return {
+			ok: false,
+			reason: `${unauthorized.length} file(s) changed outside the authorised set`,
+			changed,
+			authorized,
+			unauthorized,
+		};
+	}
+
+	return {ok: true, reason: 'every changed file is authorised', changed, authorized, unauthorized: []};
+}

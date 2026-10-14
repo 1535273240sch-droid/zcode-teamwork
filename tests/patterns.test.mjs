@@ -94,8 +94,8 @@ function readdirSafe(dir) {
 console.log('\npatterns.mjs - execution shapes');
 
 {
-	check('patterns: six are defined', PATTERN_IDS.length === 6, PATTERN_IDS.join(','));
-	check('patterns: ids match the catalogue', Object.keys(PATTERNS).length === 6, String(Object.keys(PATTERNS).length));
+	check('patterns: seven are defined', PATTERN_IDS.length === 7, PATTERN_IDS.join(','));
+	check('patterns: ids match the catalogue', Object.keys(PATTERNS).length === 7, String(Object.keys(PATTERNS).length));
 	for (const id of PATTERN_IDS) {
 		const problems = validatePattern(PATTERNS[id]);
 		check(`patterns: "${id}" validates`, problems.length === 0, problems.join('; '));
@@ -134,14 +134,14 @@ console.log('\npatterns.mjs - execution shapes');
 	check('patterns: loadPattern returns the pattern', loadPattern('math-proof').ok === true);
 	const missing = loadPattern('nope');
 	check('patterns: an unknown id is refused', missing.ok === false);
-	check('patterns: the refusal lists what is available', Array.isArray(missing.available) && missing.available.length === 6, JSON.stringify(missing.available));
+	check('patterns: the refusal lists what is available', Array.isArray(missing.available) && missing.available.length === 7, JSON.stringify(missing.available));
 	check('patterns: getPattern returns a copy of the definition', getPattern('research')?.id === 'research');
 	check('patterns: getPattern returns undefined for an unknown id', getPattern('nope') === undefined);
 }
 
 {
 	const listed = listPatterns();
-	check('patterns: listPatterns returns all six', listed.length === 6, String(listed.length));
+	check('patterns: listPatterns returns all seven', listed.length === 7, String(listed.length));
 	check('patterns: each entry explains when to use it', listed.every((p) => typeof p.whenToUse === 'string' && p.whenToUse.length > 20));
 }
 
@@ -461,7 +461,7 @@ console.log('\nengine - patterns, isolation, briefing');
 {
 	const dir = freshDir('eng-pattern');
 	const engine = new TeamworkEngine({cwd: dir});
-	check('engine: patterns are listable', engine.listPatterns().patterns.length === 6);
+	check('engine: patterns are listable', engine.listPatterns().patterns.length === 7);
 	check('engine: a pattern can be suggested', engine.suggestPattern('prove the loop terminates').pattern === 'math-proof');
 	check('engine: an empty objective cannot be suggested', engine.suggestPattern('').ok === false);
 

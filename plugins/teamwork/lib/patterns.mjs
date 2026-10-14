@@ -10,8 +10,8 @@
 // campaign cannot start in a shape that has no gate - which is exactly the failure
 // that produces confident, unverified output.
 //
-// Six patterns are defined, matching the reference implementation's set. They
-// differ in what a milestone must produce, not in how many agents run:
+// Seven patterns are defined: six matching the reference implementation's set, plus
+// tournament. They differ in what a milestone must produce, not in how many agents run:
 //
 //   distributed-coding   many independent files, parallel Workers
 //   iterative-coding     one artifact refined until it passes
@@ -19,6 +19,7 @@
 //   math-proof           a claim and its proof, checked for gaps
 //   self-verification    work whose correctness is internal to itself
 //   research             an open question answered with sources
+//   tournament           several competing attempts, falsified, then synthesised
 //
 // ASCII only: protocol artifact.
 
@@ -46,6 +47,7 @@ export const PATTERN_IDS = [
 	'math-proof',
 	'self-verification',
 	'research',
+	'tournament',
 ];
 
 // Shared gate vocabulary. A gate names the roles that must report before a
@@ -141,6 +143,27 @@ export const PATTERNS = {
 		requiresIndependentVerification: true,
 		requiresSources: true,
 	},
+
+	tournament: {
+		id: 'tournament',
+		title: 'Tournament',
+		summary: 'Several Workers attempt the same hard task by deliberately different routes; each attempt is falsified by someone who did not write it, and the Orchestrator synthesises the survivors and the salvageable parts of the rest.',
+		whenToUse: 'A core difficulty where the first plausible approach is unlikely to be the best one, and where a wrong choice is expensive enough to be worth two or three attempts at once.',
+		roles: ['sentinel', 'orchestrator', 'explorer', 'worker', 'empirical-challenger', 'critic', 'auditor', 'success-auditor'],
+		flow: ['sentinel', 'orchestrator', 'explorer', 'worker', 'empirical-challenger', 'critic', 'auditor', 'success-auditor'],
+		milestoneDeliverable: 'a candidate implementation with its falsification report, and the synthesised design',
+		// Three independent voices rather than two: a tournament's whole purpose is to
+		// find the approach that survives an attack, so the attack is not optional.
+		gate: {roles: ['empirical-challenger', 'critic', 'auditor'], minIndependent: 3},
+		// Candidates share a file scope on purpose - comparing two attempts at the same
+		// code is the point of the pattern - so the disjoint-file rule that makes the
+		// other patterns' parallelism safe cannot apply here. Isolation takes its place,
+		// and the plan check below demands a worktree per candidate.
+		requiresDisjointFiles: false,
+		requiresIsolatedCandidates: true,
+		requiresIndependentVerification: true,
+		tournament: {candidates: 3, falsifiersPerCandidate: 1, synthesis: true},
+	},
 };
 
 /** Validate a pattern. Returns the problems, empty when usable. */
@@ -166,6 +189,18 @@ export function validatePattern(pattern) {
 	// The implementer must not be its own verifier.
 	if (Array.isArray(pattern.gate?.roles) && pattern.gate.roles.includes('worker')) {
 		problems.push('gate includes worker, which implements the milestone');
+	}
+	// A tournament with one candidate is a single Worker paying tournament overhead; a
+	// candidate without its own falsifier gets its verdict from the agent that wrote it.
+	if (pattern.tournament) {
+		const candidates = Number(pattern.tournament.candidates);
+		if (!Number.isFinite(candidates) || candidates < 2) {
+			problems.push('tournament needs at least two candidates to compare');
+		}
+		const falsifiers = Number(pattern.tournament.falsifiersPerCandidate);
+		if (!Number.isFinite(falsifiers) || falsifiers < 1) {
+			problems.push('tournament needs at least one falsifier per candidate');
+		}
 	}
 	return problems;
 }
@@ -207,6 +242,7 @@ export function suggestPattern(objective) {
 	if (/(readme|document|documentation|guide|specification|rfc|write up)/.test(text)) return 'document-review';
 	if (/(benchmark|optimis|optimiz|performance|tune|speed up)/.test(text)) return 'iterative-coding';
 	if (/(one component|single class|single function|rewrite the .* function|get .* passing)/.test(text)) return 'iterative-coding';
+	if (/(competing|alternative approach|several approaches|alternative designs|which design|trade-?off|best approach|try .* routes)/.test(text)) return 'tournament';
 	if (/(refactor|migrat|rename|port|replace|across|every file|all call sites)/.test(text)) return 'distributed-coding';
 	return 'distributed-coding';
 }
@@ -263,6 +299,43 @@ export function checkPlanAgainstPattern(pattern, milestones) {
 		);
 	}
 
+	// Candidates in a tournament share their file scope, and isolation is what makes
+	// that safe. The first rule below is therefore stated as a property of the plan
+	// rather than of a label, so a plan is judged by what it does: every milestone that
+	// shares a file must be isolated from the ones it shares it with.
+	if (pattern.requiresIsolatedCandidates) {
+		const byFile = new Map();
+		for (const milestone of list) {
+			for (const file of milestone?.files ?? []) {
+				const key = normalizePath(file);
+				byFile.set(key, [...(byFile.get(key) ?? []), milestone]);
+			}
+		}
+		const offenders = new Set();
+		for (const holders of byFile.values()) {
+			if (holders.length < 2) continue;
+			for (const holder of holders) {
+				if (holder?.isolation !== 'worktree') offenders.add(holder.id);
+			}
+		}
+		for (const id of offenders) {
+			problems.push(`"${id}" shares a file with another milestone but declares no worktree isolation, so the shared file would be a lost update`);
+		}
+
+		// The entrants are the milestones carrying a candidate number. The falsification
+		// milestones carry one too - they are numbered by the candidate they attack - so
+		// they are excluded by kind, or the check would demand they race each other.
+		const candidates = list.filter((m) => m?.candidate !== undefined && m?.kind !== 'falsification');
+		if (candidates.length < 2) {
+			problems.push('a tournament needs at least two candidate milestones to compare');
+		}
+		for (const milestone of candidates) {
+			if ((milestone?.blocked_by ?? []).length > 0) {
+				problems.push(`tournament candidate "${milestone.id}" is blocked, so it cannot race the other candidates`);
+			}
+		}
+	}
+
 	return {ok: problems.length === 0, problems};
 }
 
@@ -283,5 +356,9 @@ export function describePattern(id) {
 	if (pattern.requiresSources) lines.push('Every claim must cite a source');
 	if (pattern.forbidsSelfAuthoredFixtures) lines.push('Fixtures may not be authored by the implementer');
 	if (pattern.forbidsImplementerDerivation) lines.push('The second derivation may not come from the implementer');
+	if (pattern.requiresIsolatedCandidates) lines.push('Candidates share files, so each one needs its own worktree');
+	if (pattern.tournament) {
+		lines.push(`Tournament: ${pattern.tournament.candidates} candidates, ${pattern.tournament.falsifiersPerCandidate} falsifier(s) each, then synthesis`);
+	}
 	return lines.join('\n');
 }
