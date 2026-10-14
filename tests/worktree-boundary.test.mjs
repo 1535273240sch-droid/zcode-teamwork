@@ -250,6 +250,23 @@ if (!gitAvailable()) {
 		r = run('bash-guard.mjs', bashPayload(`echo x > "${mainAbs}"`), {TEAMWORK_OWNER_TOKEN: ''});
 		check('guard: with no boundary the guard behaves as it always did', r.stdout.includes('"permissionDecision":"allow"'), r.stdout.slice(0, 200));
 
+		// `~` is only special as the first character of a word. A mid-path `~` is a literal
+		// character - Windows short names are full of them, so a real workspace can sit
+		// under one - and discarding such a target silently turned every check off there.
+		// Both directions are asserted, because the fix must not start resolving `~/...`.
+		const tildeDir = join(root, 'tilde~dir');
+		mkdirSync(tildeDir, {recursive: true});
+		resetLock();
+		r = run('bash-guard.mjs', bashPayload(`echo x > "${join(tildeDir, 'x.ts')}"`), {TEAMWORK_OWNER_TOKEN: ''});
+		check(
+			'guard: a literal ~ inside a path is attributed rather than mistaken for home expansion',
+			r.stdout.includes('"permissionDecision":"allow"'),
+			r.stdout.slice(0, 200),
+		);
+		resetLock();
+		r = run('bash-guard.mjs', bashPayload('echo x > ~/notes.ts'), {TEAMWORK_OWNER_TOKEN: ''});
+		check('guard: a leading ~ is still treated as home expansion and left alone', r.stdout === '', r.stdout.slice(0, 200));
+
 		// The ownership table is not replaced by the boundary: a file held by another
 		// owner is still refused, even inside the assigned worktree.
 		resetLock();
