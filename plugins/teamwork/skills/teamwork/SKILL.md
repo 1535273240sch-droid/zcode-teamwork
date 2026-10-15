@@ -124,6 +124,8 @@ After approval, set `approved: true` and `phase: "execution"`, then:
   "milestones": [
     {
       "id": "m1",
+      "title": "<任务短语，像真人接的活：把 desc 接口接进采集器>",
+      "owner": "<承接人名片：人名 · 角色短语（一句工作风格）>",
       "deliverable": "<checkable artifact>",
       "files": ["src/a.ts"],
       "blocked_by": [],
@@ -136,7 +138,7 @@ After approval, set `approved: true` and `phase: "execution"`, then:
 }
 ```
 
-`ownership` maps every in-scope file to exactly one milestone. `status` and `verified` are updated as the campaign runs, so a session that restarts can see where it left off.
+`id` is the machine anchor: the dependency graph, the ownership table, and the verification filename (`.teamwork/verifications/<id>.md`) use it and nothing else. `title` and `owner` are the display layer — they are what appears on dispatch cards, the dashboard, and reports, so a campaign reads like a crew of named people picking up real jobs instead of "M1/M2/M3". `ownership` maps every in-scope file to exactly one milestone. `status` and `verified` are updated as the campaign runs, so a session that restarts can see where it left off.
 
 ### When something fails
 
